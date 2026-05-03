@@ -61,6 +61,7 @@ Qual é a meta principal: Concluir a narrativa alcançando a porta final (o terr
 * **Uso Estratégico da Pílula:** O jogador precisa calcular exatamente quando tomar a pílula para colher pistas rápidas, pois a queda acelerada de sanidade após o término do efeito exige rapidez para evitar o colapso mental.
 
 ## 12. Estrutura do Projeto
+```text
 o-eco-do-abismo/
 │
 ├── assets/                  # Arquivos de mídia
@@ -78,6 +79,7 @@ o-eco-do-abismo/
 │
 ├── README.md                # Documentação do projeto
 └── requirements.txt         # Dependências (ex: pygame)
+```
 
 ## 13. Funcionalidades Mínimas
 * **Movimentação e Colisão:** Movimentação do personagem nas quatro direções com W, A, S, D impedindo que ele atravesse paredes ou objetos sólidos.
