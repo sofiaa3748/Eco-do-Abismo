@@ -71,10 +71,10 @@ o-eco-do-abismo/
 │
 ├── src/                     # Código-fonte do jogo
 │   ├── main.py              # Loop principal do jogo
-│   ├── personagem.py            # Movimentação e lógica de sanidade
+│   ├── personagem.py        # Movimentação e lógica de sanidade
 │   ├── nivel.py             # Gerenciamento de mapa, colisões e gás
 │   ├── puzzle.py            # Minijogo de ondas senoidais
-│   ├── interface_usuario.py                # Sistema de diálogos e efeitos visuais
+│   ├── interface_usuario.py # Sistema de diálogos e efeitos visuais
 │   └── settings.py          # Configurações de resolução e FPS
 │
 ├── README.md                # Documentação do projeto
