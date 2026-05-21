@@ -75,7 +75,7 @@ o-eco-do-abismo/
 │   ├── nivel.py             # Gerenciamento de mapa, colisões e gás
 │   ├── puzzle.py            # Minijogo de ondas senoidais
 │   ├── interface_usuario.py # Sistema de diálogos e efeitos visuais
-│   └── settings.py          # Configurações de resolução e FPS
+│   └── configuracoes.py          # Configurações de resolução e FPS
 │
 ├── README.md                # Documentação do projeto
 └── requirements.txt         # Dependências (ex: pygame)
