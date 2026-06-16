@@ -27,6 +27,16 @@ class Jogador(Personagem):
             self.sanidade += 5
         else:
             self.sanidade -= 1
-
-
+            
+    def andar_teclas(self, teclas):
+        velocidade = 5
+        if teclas[pygame.K_LEFT]:
+            self.x -= velocidade
+        if teclas[pygame.K_RIGHT]:
+            self.x += velocidade
+        if teclas[pygame.K_UP]:
+            self.x -= velocidade
+        if teclas[pygame.K_DOWN]:
+            self.x += velocidade
+        
 
