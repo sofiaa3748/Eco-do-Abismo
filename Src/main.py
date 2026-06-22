@@ -2,6 +2,7 @@ import pygame
 import sys
 import math
 import random
+from personagem import Jogador
 
 pygame.init()
 
@@ -9,15 +10,16 @@ LARGURA, ALTURA = 900, 600
 tela = pygame.display.set_mode((LARGURA, ALTURA))
 pygame.display.set_caption("Eco do Abismo")
 
-PRETO        = (0, 0, 0)
-BRANCO       = (255, 255, 255)
-AZUL_ABISMO  = (10, 20, 45)
-AZUL_ESCURO  = (5, 10, 30)
-CIANO_BRILHO = (0, 220, 255)
-CIANO_SUAVE  = (0, 150, 180)
-CINZA_NÉVOA  = (40, 60, 90)
-DOURADO      = (200, 160, 50)
+PRETO          = (0, 0, 0)
+BRANCO         = (255, 255, 255)
+AZUL_ABISMO    = (10, 20, 45)
+AZUL_ESCURO    = (5, 10, 30)
+CIANO_BRILHO   = (0, 220, 255)
+CIANO_SUAVE    = (0, 150, 180)
+CINZA_NÉVOA    = (40, 60, 90)
+DOURADO        = (200, 160, 50)
 DOURADO_BRILHO = (255, 210, 80)
+VERMELHO_SANGUE = (180, 20, 20)
 
 try:
     fonte_titulo   = pygame.font.SysFont("consolas", 64, bold=True)
@@ -57,7 +59,16 @@ class Particula:
         surf.blit(s, (int(self.x), int(self.y)))
 
 
-particulas = [Particula() for _ in range(90)]
+class FrascoPilula:
+    def __init__(self, x, y):
+        self.rect = pygame.Rect(x, y, 20, 25)
+        self.coletado = False
+
+    def desenhar(self, surf):
+        if not self.coletado:
+            pygame.draw.rect(surf, DOURADO, self.rect, border_radius=3)
+            pygame.draw.rect(surf, BRANCO, (self.rect.x + 4, self.rect.y - 4, 12, 5))
+
 
 class Botao:
     def __init__(self, texto, cx, cy, largura=260, altura=52):
@@ -85,14 +96,9 @@ class Botao:
         pygame.draw.rect(sombra, (0, 180, 220, 40), sombra.get_rect(), border_radius=8)
         surf.blit(sombra, (rx - 5, ry + 6))
 
-        cor_fundo = (
-            int(5  + self.brilho * 0),
-            int(25 + self.brilho * 30),
-            int(55 + self.brilho * 30),
-        )
+        cor_fundo = (int(5 + self.brilho * 0), int(25 + self.brilho * 30), int(55 + self.brilho * 30))
         pygame.draw.rect(surf, cor_fundo, r, border_radius=8)
 
-        # Borda
         alfa_borda = int(120 + self.brilho * 135)
         borda_surf = pygame.Surface((larg, alt), pygame.SRCALPHA)
         pygame.draw.rect(borda_surf, (*CIANO_BRILHO, alfa_borda), borda_surf.get_rect(), width=2, border_radius=8)
@@ -103,23 +109,32 @@ class Botao:
         pygame.draw.rect(linha_surf, linha_cor, linha_surf.get_rect(), border_radius=2)
         surf.blit(linha_surf, (rx + 10, ry + 8))
 
-        cor_texto = (
-            int(180 + self.brilho * 75),
-            int(220 + self.brilho * 35),
-            int(240 + self.brilho * 15),
-        )
+        cor_texto = (int(180 + self.brilho * 75), int(220 + self.brilho * 35), int(240 + self.brilho * 15))
         txt = fonte_botao.render(self.texto, True, cor_texto)
         surf.blit(txt, txt.get_rect(center=r.center))
 
     def clicado(self, evento):
         return evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1 and self.rect.collidepoint(evento.pos)
 
+particulas = [Particula() for _ in range(90)]
 cx_botoes = LARGURA // 2
 botoes = [
     Botao("▶  JOGAR",    cx_botoes, 340),
     Botao("★  CRÉDITOS", cx_botoes, 410),
     Botao("✕  SAIR",     cx_botoes, 480),
 ]
+
+def gerar_frascos_na_sala():
+    """Lógica de Spawn Aleatório (Fim da Semana 3)"""
+    posicoes_possiveis = [
+        (220, 150), (450, 120), (720, 180),
+        (150, 420), (520, 310), (810, 450),
+        (330, 490), (610, 240)
+    ]
+    quantidade_para_spawnar = random.randint(3, 5)
+    posicoes_escolhidas = random.sample(posicoes_possiveis, quantidade_para_spawnar)
+    
+    return [FrascoPilula(pos[0], pos[1]) for pos in posicoes_escolhidas]
 
 def desenhar_fundo(surf, tempo):
     for y in range(ALTURA):
@@ -139,21 +154,17 @@ def desenhar_fundo(surf, tempo):
 
     nevoa = pygame.Surface((LARGURA, ALTURA), pygame.SRCALPHA)
     raio  = int(260 + math.sin(tempo * 0.001) * 20)
-    pygame.draw.ellipse(nevoa, (0, 100, 150, 18),
-                        (LARGURA // 2 - raio, ALTURA // 2 - 120, raio * 2, 280))
+    pygame.draw.ellipse(nevoa, (0, 100, 150, 18), (LARGURA // 2 - raio, ALTURA // 2 - 120, raio * 2, 280))
     surf.blit(nevoa, (0, 0))
 
 def desenhar_titulo(surf, tempo):
-    pulso = math.sin(tempo * 0.002) * 0.5 + 0.5   # 0 → 1
-
+    pulso = math.sin(tempo * 0.002) * 0.5 + 0.5
     sombra = fonte_titulo.render("ECO DO ABISMO", True, (0, 40, 80))
-    pos_s  = sombra.get_rect(center=(LARGURA // 2 + 3, 165))
-    surf.blit(sombra, pos_s)
+    surf.blit(sombra, sombra.get_rect(center=(LARGURA // 2 + 3, 165)))
 
     for offset, alfa_base in [(6, 18), (3, 35)]:
         glow_surf = pygame.Surface((LARGURA, 120), pygame.SRCALPHA)
-        txt_g     = fonte_titulo.render("ECO DO ABISMO", True,
-                                        (*CIANO_BRILHO, int(alfa_base + pulso * 20)))
+        txt_g     = fonte_titulo.render("ECO DO ABISMO", True, (*CIANO_BRILHO, int(alfa_base + pulso * 20)))
         glow_surf.blit(txt_g, txt_g.get_rect(center=(LARGURA // 2, 60)))
         for dx in range(-offset, offset + 1, 2):
             surf.blit(glow_surf, (dx, 105))
@@ -164,54 +175,131 @@ def desenhar_titulo(surf, tempo):
     txt_main = fonte_titulo.render("ECO DO ABISMO", True, (r_, g_, b_))
     surf.blit(txt_main, txt_main.get_rect(center=(LARGURA // 2, 165)))
 
-    linha_w = 340
-    lx = LARGURA // 2 - linha_w // 2
-    ly = 200
-    cor_linha = (*CIANO_BRILHO, int(80 + pulso * 120))
+    linha_w, ly = 340, 200
     linha_s = pygame.Surface((linha_w, 2), pygame.SRCALPHA)
-    linha_s.fill(cor_linha)
-    surf.blit(linha_s, (lx, ly))
+    linha_s.fill((*CIANO_BRILHO, int(80 + pulso * 120)))
+    surf.blit(linha_s, (LARGURA // 2 - linha_w // 2, ly))
 
-    sub = fonte_subtitulo.render("— Desça. Ouça. Sobreviva. —", True,
-                                  (int(80 + pulso * 40), int(160 + pulso * 40), int(200 + pulso * 30)))
+    sub = fonte_subtitulo.render("— Desça. Ouça. Sobreviva. —", True, (int(80 + pulso * 40), int(160 + pulso * 40), int(200 + pulso * 30)))
     surf.blit(sub, sub.get_rect(center=(LARGURA // 2, 218)))
+
+def desenhar_hud(surf, jogador):
+    pygame.draw.rect(surf, (40, 40, 40), (20, 20, 200, 18), border_radius=3)
+ 
+    proporcao_barra = int(200 * (jogador.sanidade / 100))
+    cor_barra = CIANO_BRILHO if jogador.efeito_pilula_ativo else VERMELHO_SANGUE
+    if proporcao_barra > 0:
+        pygame.draw.rect(surf, cor_barra, (20, 20, proporcao_barra, 18), border_radius=3)
+    
+    txt_sanidade = fonte_subtitulo.render(f"SANIDADE: {int(jogador.sanidade)}%", True, BRANCO)
+    surf.blit(txt_sanidade, (20, 45))
+
+    txt_inventario = fonte_subtitulo.render(f"PÍLULAS: {jogador.quantidade_pilulas}", True, DOURADO_BRILHO)
+    surf.blit(txt_inventario, (20, 70))
+    
+    if jogador.efeito_pilula_ativo:
+        txt_efeito = fonte_subtitulo.render("[EFEITO ATIVO]", True, CIANO_BRILHO)
+        surf.blit(txt_efeito, (20, 95))
+
 
 def main():
     rodando = True
+    estado = "MENU"
+    
+    jogador = Jogador(100, 300, "Operário 724")
+    frascos = [] 
+
+    offset_tremor_x = 0
+    offset_tremor_y = 0
+
     while rodando:
         tempo = pygame.time.get_ticks()
         mouse = pygame.mouse.get_pos()
+        teclas = pygame.key.get_pressed()
 
         for evento in pygame.event.get():
             if evento.type == pygame.QUIT:
                 rodando = False
 
-            for botao in botoes:
-                if botao.clicado(evento):
-                    if botao.texto.endswith("SAIR"):
-                        rodando = False
+            if estado == "MENU":
+                for botao in botoes:
+                    if botao.clicado(evento):
+                        if botao.texto.endswith("JOGAR"):
+                            estado = "JOGANDO"
+                            jogador.sanidade = 100
+                            jogador.quantidade_pilulas = 0
+                            jogador.x, jogador.y = 100, 300
+                            jogador.efeito_pilula_ativo = False
+                            frascos = gerar_frascos_na_sala()
+                        elif botao.texto.endswith("SAIR"):
+                            rodando = False
+            
+            elif estado == "JOGANDO":
+                if evento.type == pygame.KEYDOWN:
+                    if evento.key == pygame.K_ESCAPE:
+                        estado = "MENU"
+                
+                    if evento.key == pygame.K_e:
+                        proximo_a_um_frasco = False
+                        for f in frascos:
+                            if not f.coletado and jogador.get_rect().colliderect(f.rect):
+                                f.coletado = True
+                                jogador.quantidade_pilulas += 1
+                                proximo_a_um_frasco = True
+                                break
+                        
+                        if not proximo_a_um_frasco:
+                            jogador.tentar_tomar_pilula(tempo)
 
-        for p in particulas:
-            p.atualizar()
-        for botao in botoes:
-            botao.atualizar(mouse)
+        if estado == "MENU":
+            for p in particulas: p.atualizar()
+            for botao in botoes: botao.atualizar(mouse)
+                
+        elif estado == "JOGANDO":
+            jogador.andar_teclas(teclas, LARGURA, ALTURA)
+            jogador.dano_sanidade(0.03)
+            jogador.atualizar_efeito_pilula(tempo)
 
-        desenhar_fundo(tela, tempo)
-        for p in particulas:
-            p.desenhar(tela)
-        desenhar_titulo(tela, tempo)
-        for botao in botoes:
-            botao.desenhar(tela)
-       
-        rodape = fonte_subtitulo.render("© 2026  Eco do Abismo  —  Todos os direitos reservados", True, (40, 70, 100))
-        tela.blit(rodape, rodape.get_rect(center=(LARGURA // 2, ALTURA - 20)))
+            if jogador.sanidade <= 0:
+                jogador.sanidade = 100
+                jogador.quantidade_pilulas = 0
+                jogador.x, jogador.y = 100, 300
+                jogador.efeito_pilula_ativo = False
+                frascos = gerar_frascos_na_sala()
+
+            if jogador.sanidade < 30:
+                offset_tremor_x = random.randint(-3, 3)
+                offset_tremor_y = random.randint(-3, 3)
+            else:
+                offset_tremor_x, offset_tremor_y = 0, 0
+
+        if estado == "MENU":
+            desenhar_fundo(tela, tempo)
+            for p in particulas: p.desenhar(tela)
+            desenhar_titulo(tela, tempo)
+            for botao in botoes: botao.desenhar(tela)
+            
+            rodape = fonte_subtitulo.render("© 2026  Eco do Abismo  —  Todos os direitos reservados", True, (40, 70, 100))
+            tela.blit(rodape, rodape.get_rect(center=(LARGURA // 2, ALTURA - 20)))
+            
+        elif estado == "JOGANDO":
+            superficie_fase = pygame.Surface((LARGURA, ALTURA))
+            superficie_fase.fill(AZUL_ESCURO)
+
+            for f in frascos:
+                f.desenhar(superficie_fase)
+
+            cor_player = CIANO_BRILHO if jogador.efeito_pilula_ativo else BRANCO
+            pygame.draw.rect(superficie_fase, cor_player, jogador.get_rect(), border_radius=4)
+           
+            tela.blit(superficie_fase, (offset_tremor_x, offset_tremor_y))
+            desenhar_hud(tela, jogador)
 
         pygame.display.flip()
         relogio.tick(60)
 
     pygame.quit()
     sys.exit()
-
 
 if __name__ == "__main__":
     main()
