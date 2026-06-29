@@ -24,7 +24,7 @@ class Personagem:
 
 class Jogador(Personagem):
     def __init__(self, x, y, nome):
-        super().__init__(self, x, y, nome, sanidade =100)
+        super().__init__(self, x, y, nome)
         self.quantidade_pilulas = 0
         self.efeito_pilula_ativo = False
         self.tempo_pilula_ativa = 0
