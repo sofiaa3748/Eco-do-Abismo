@@ -2,7 +2,10 @@ import pygame
 import sys
 import math
 import random
-from personagem import Jogador
+from personagem import Jogador, CameraSeguranca
+from nivel import Sala
+from puzzle import PuzzleRadio
+from interface_usuario import desenhar_hud, desenhar_mensagem_contextual, desenhar_flash_detectado
 
 pygame.init()
 
@@ -20,6 +23,7 @@ CINZA_NÉVOA    = (40, 60, 90)
 DOURADO        = (200, 160, 50)
 DOURADO_BRILHO = (255, 210, 80)
 VERMELHO_SANGUE = (180, 20, 20)
+AMARELO_ALERTA = (230, 200, 60)
 
 try:
     fonte_titulo   = pygame.font.SysFont("consolas", 64, bold=True)
@@ -31,6 +35,7 @@ except:
     fonte_botao    = pygame.font.SysFont(None, 26)
 
 relogio = pygame.time.Clock()
+
 
 class Particula:
     def __init__(self):
@@ -116,25 +121,27 @@ class Botao:
     def clicado(self, evento):
         return evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1 and self.rect.collidepoint(evento.pos)
 
+
 particulas = [Particula() for _ in range(90)]
 cx_botoes = LARGURA // 2
 botoes = [
-    Botao("▶  JOGAR",    cx_botoes, 340),
-    Botao("★  CRÉDITOS", cx_botoes, 410),
-    Botao("✕  SAIR",     cx_botoes, 480),
+    Botao("JOGAR",    cx_botoes, 340),
+    Botao("CRÉDITOS", cx_botoes, 410),
+    Botao("SAIR",     cx_botoes, 480),
 ]
 
+
 def gerar_frascos_na_sala():
-    """Lógica de Spawn Aleatório (Fim da Semana 3)"""
+    """Lógica de Spawn Aleatório (Semana 3), evitando posições muito perto da porta."""
     posicoes_possiveis = [
         (220, 150), (450, 120), (720, 180),
-        (150, 420), (520, 310), (810, 450),
+        (150, 420), (520, 310),
         (330, 490), (610, 240)
     ]
     quantidade_para_spawnar = random.randint(3, 5)
     posicoes_escolhidas = random.sample(posicoes_possiveis, quantidade_para_spawnar)
-    
     return [FrascoPilula(pos[0], pos[1]) for pos in posicoes_escolhidas]
+
 
 def desenhar_fundo(surf, tempo):
     for y in range(ALTURA):
@@ -156,6 +163,7 @@ def desenhar_fundo(surf, tempo):
     raio  = int(260 + math.sin(tempo * 0.001) * 20)
     pygame.draw.ellipse(nevoa, (0, 100, 150, 18), (LARGURA // 2 - raio, ALTURA // 2 - 120, raio * 2, 280))
     surf.blit(nevoa, (0, 0))
+
 
 def desenhar_titulo(surf, tempo):
     pulso = math.sin(tempo * 0.002) * 0.5 + 0.5
@@ -183,34 +191,39 @@ def desenhar_titulo(surf, tempo):
     sub = fonte_subtitulo.render("— Desça. Ouça. Sobreviva. —", True, (int(80 + pulso * 40), int(160 + pulso * 40), int(200 + pulso * 30)))
     surf.blit(sub, sub.get_rect(center=(LARGURA // 2, 218)))
 
-def desenhar_hud(surf, jogador):
-    pygame.draw.rect(surf, (40, 40, 40), (20, 20, 200, 18), border_radius=3)
- 
-    proporcao_barra = int(200 * (jogador.sanidade / 100))
-    cor_barra = CIANO_BRILHO if jogador.efeito_pilula_ativo else VERMELHO_SANGUE
-    if proporcao_barra > 0:
-        pygame.draw.rect(surf, cor_barra, (20, 20, proporcao_barra, 18), border_radius=3)
-    
-    txt_sanidade = fonte_subtitulo.render(f"SANIDADE: {int(jogador.sanidade)}%", True, BRANCO)
-    surf.blit(txt_sanidade, (20, 45))
 
-    txt_inventario = fonte_subtitulo.render(f"PÍLULAS: {jogador.quantidade_pilulas}", True, DOURADO_BRILHO)
-    surf.blit(txt_inventario, (20, 70))
+def iniciar_sala(jogador):
+    """Reseta o estado da sala atual: posição do jogador, frascos, câmera e puzzle."""
+    jogador.sanidade = 100
+    jogador.quantidade_pilulas = 0
+    jogador.efeito_pilula_ativo = False
+
+    sala = Sala(LARGURA, ALTURA, ponto_entrada=(60, ALTURA // 2 - 16))
+    jogador.x, jogador.y = sala.ponto_entrada
+
+    frascos = gerar_frascos_na_sala()
     
-    if jogador.efeito_pilula_ativo:
-        txt_efeito = fonte_subtitulo.render("[EFEITO ATIVO]", True, CIANO_BRILHO)
-        surf.blit(txt_efeito, (20, 95))
+    camera = CameraSeguranca(x=LARGURA - 40, y=40, angulo_inicial=135,
+                              alcance=260, abertura_graus=50,
+                              velocidade_giro=0.5, arco_max=35)
+
+    puzzle = PuzzleRadio(LARGURA, ALTURA)
+
+    return sala, frascos, camera, puzzle
 
 
 def main():
     rodando = True
     estado = "MENU"
-    
-    jogador = Jogador(100, 300, "Operário 724")
-    frascos = [] 
 
+    jogador = Jogador(100, 300, "Operário 724")
+    sala, frascos, camera, puzzle = iniciar_sala(jogador)
+
+    puzzle_aberto = False
     offset_tremor_x = 0
     offset_tremor_y = 0
+    mensagem_flash_ativo = False
+    tempo_flash = 0
 
     while rodando:
         tempo = pygame.time.get_ticks()
@@ -226,46 +239,71 @@ def main():
                     if botao.clicado(evento):
                         if botao.texto.endswith("JOGAR"):
                             estado = "JOGANDO"
-                            jogador.sanidade = 100
-                            jogador.quantidade_pilulas = 0
-                            jogador.x, jogador.y = 100, 300
-                            jogador.efeito_pilula_ativo = False
-                            frascos = gerar_frascos_na_sala()
+                            sala, frascos, camera, puzzle = iniciar_sala(jogador)
+                            puzzle_aberto = False
                         elif botao.texto.endswith("SAIR"):
                             rodando = False
-            
+
             elif estado == "JOGANDO":
                 if evento.type == pygame.KEYDOWN:
                     if evento.key == pygame.K_ESCAPE:
-                        estado = "MENU"
-                
-                    if evento.key == pygame.K_e:
-                        proximo_a_um_frasco = False
+                        if puzzle_aberto:
+                            puzzle_aberto = False
+                        else:
+                            estado = "MENU"
+
+                    if evento.key == pygame.K_e and not puzzle_aberto:
+                        acao_realizada = False
+
                         for f in frascos:
                             if not f.coletado and jogador.get_rect().colliderect(f.rect):
                                 f.coletado = True
                                 jogador.quantidade_pilulas += 1
-                                proximo_a_um_frasco = True
+                                acao_realizada = True
                                 break
-                        
-                        if not proximo_a_um_frasco:
+
+                        if not acao_realizada and not sala.porta_aberta and sala.jogador_na_porta(jogador):
+                            puzzle_aberto = True
+                            acao_realizada = True
+                            
+                        if not acao_realizada:
                             jogador.tentar_tomar_pilula(tempo)
 
-        if estado == "MENU":
-            for p in particulas: p.atualizar()
-            for botao in botoes: botao.atualizar(mouse)
-                
-        elif estado == "JOGANDO":
-            jogador.andar_teclas(teclas, LARGURA, ALTURA)
-            jogador.dano_sanidade(0.03)
-            jogador.atualizar_efeito_pilula(tempo)
+                if puzzle_aberto:
+                    puzzle.processar_evento(evento)
 
-            if jogador.sanidade <= 0:
-                jogador.sanidade = 100
-                jogador.quantidade_pilulas = 0
-                jogador.x, jogador.y = 100, 300
-                jogador.efeito_pilula_ativo = False
-                frascos = gerar_frascos_na_sala()
+        if estado == "MENU":
+            for p in particulas:
+                p.atualizar()
+            for botao in botoes:
+                botao.atualizar(mouse)
+
+        elif estado == "JOGANDO":
+            if puzzle_aberto:
+                puzzle.atualizar(teclas)
+                if puzzle.resolvido:
+                    sala.porta_aberta = True
+            else:
+                jogador.andar_teclas(teclas, LARGURA, ALTURA, paredes=sala.paredes_colisao())
+                jogador.dano_sanidade(0.03)
+                jogador.atualizar_efeito_pilula(tempo)
+                camera.atualizar()
+
+                if camera.detecta(jogador):
+                    mensagem_flash_ativo = True
+                    tempo_flash = tempo
+                    jogador.x, jogador.y = sala.ponto_entrada
+
+                if mensagem_flash_ativo and tempo - tempo_flash > 250:
+                    mensagem_flash_ativo = False
+
+                if sala.porta_aberta and sala.jogador_na_porta(jogador):
+                    sala, frascos, camera, puzzle = iniciar_sala(jogador)
+                    puzzle_aberto = False
+
+                if jogador.sanidade <= 0:
+                    sala, frascos, camera, puzzle = iniciar_sala(jogador)
+                    puzzle_aberto = False
 
             if jogador.sanidade < 30:
                 offset_tremor_x = random.randint(-3, 3)
@@ -275,31 +313,62 @@ def main():
 
         if estado == "MENU":
             desenhar_fundo(tela, tempo)
-            for p in particulas: p.desenhar(tela)
+            for p in particulas:
+                p.desenhar(tela)
             desenhar_titulo(tela, tempo)
-            for botao in botoes: botao.desenhar(tela)
-            
+            for botao in botoes:
+                botao.desenhar(tela)
+
             rodape = fonte_subtitulo.render("© 2026  Eco do Abismo  —  Todos os direitos reservados", True, (40, 70, 100))
             tela.blit(rodape, rodape.get_rect(center=(LARGURA // 2, ALTURA - 20)))
-            
+
         elif estado == "JOGANDO":
             superficie_fase = pygame.Surface((LARGURA, ALTURA))
             superficie_fase.fill(AZUL_ESCURO)
 
+            sala.desenhar(superficie_fase)
+
             for f in frascos:
                 f.desenhar(superficie_fase)
 
+            cone_surf = pygame.Surface((LARGURA, ALTURA), pygame.SRCALPHA)
+            cor_cone = (*VERMELHO_SANGUE, 70) if camera.detecta(jogador) else (*AMARELO_ALERTA, 45)
+            pygame.draw.polygon(cone_surf, cor_cone, camera.pontos_do_cone())
+            superficie_fase.blit(cone_surf, (0, 0))
+
+            cor_lente = VERMELHO_SANGUE if camera.detecta(jogador) else (200, 200, 210)
+            pygame.draw.rect(superficie_fase, (30, 30, 35), (camera.x - 12, camera.y - 12, 24, 24), border_radius=3)
+            dir_x = math.cos(math.radians(camera.angulo))
+            dir_y = math.sin(math.radians(camera.angulo))
+            ponta_lente = (camera.x + dir_x * 16, camera.y + dir_y * 16)
+            pygame.draw.circle(superficie_fase, cor_lente, ponta_lente, 6)
+
             cor_player = CIANO_BRILHO if jogador.efeito_pilula_ativo else BRANCO
             pygame.draw.rect(superficie_fase, cor_player, jogador.get_rect(), border_radius=4)
-           
+
             tela.blit(superficie_fase, (offset_tremor_x, offset_tremor_y))
-            desenhar_hud(tela, jogador)
+
+            desenhar_hud(tela, jogador, fonte_subtitulo)
+
+            if not sala.porta_aberta and sala.jogador_na_porta(jogador) and not puzzle_aberto:
+                desenhar_mensagem_contextual(tela, "Pressione E para acessar o painel de rádio",
+                                              LARGURA, ALTURA, fonte_subtitulo)
+            elif sala.porta_aberta and sala.jogador_na_porta(jogador):
+                desenhar_mensagem_contextual(tela, "Porta liberada — siga em frente",
+                                              LARGURA, ALTURA, fonte_subtitulo)
+
+            if puzzle_aberto:
+                puzzle.desenhar(tela, fonte_subtitulo)
+
+            if mensagem_flash_ativo:
+                desenhar_flash_detectado(tela, LARGURA, ALTURA)
 
         pygame.display.flip()
         relogio.tick(60)
 
     pygame.quit()
     sys.exit()
+
 
 if __name__ == "__main__":
     main()
