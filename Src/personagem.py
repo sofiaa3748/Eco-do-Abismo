@@ -1,172 +1,89 @@
 import pygame
 import math
 
-
-class Personagem:
-    def __init__(self, x, y, nome, sanidade=10):
-        self.nome = nome
+class Jogador:
+    def __init__(self, x, y, nome="Operário 724"):
         self.x = x
         self.y = y
-        self.sanidade = sanidade
-
-    def mover(self, direcao):
-        if direcao == 'pular':
-            self.y -= 1
-        elif direcao == 'agachar':
-            self.y += 1
-        elif direcao == 'esquerda':
-            self.x -= 1
-        elif direcao == 'direita':
-            self.x += 1
-
-    def dano_sanidade(self, quantidade):
-        self.sanidade -= quantidade
-        if self.sanidade < 0:
-            self.sanidade = 0
-        if self.sanidade > 100:
-            self.sanidade = 100
-
-
-class Jogador(Personagem):
-    def __init__(self, x, y, nome):
-        super().__init__(x, y, nome, sanidade=100)
-
-        self.quantidade_pilulas = 0
-        self.efeito_pilula_ativo = False
-        self.tempo_pilula_ativa = 0
-        self.duracao_efeito = 5000 
-
-        self.largura = 32
-        self.altura = 32
-
-    def tomar_pilula(self, tempo_atual):
-        """Consome uma pílula do inventário e ativa o efeito (visão de pistas)."""
-        if self.quantidade_pilulas > 0 and not self.efeito_pilula_ativo:
-            self.quantidade_pilulas -= 1
-            self.efeito_pilula_ativo = True
-            self.tempo_pilula_ativa = tempo_atual
-            self.dano_sanidade(10)
-            return True
-        return False
-
-    def tentar_tomar_pilula(self, tempo_atual):
-        return self.tomar_pilula(tempo_atual)
-
-    def atualizar_efeito_pilula(self, tempo_atual):
-        if self.efeito_pilula_ativo:
-            if tempo_atual - self.tempo_pilula_ativa > self.duracao_efeito:
-                self.efeito_pilula_ativo = False
-                self.dano_sanidade(25) 
-
-    def andar_teclas(self, teclas, largura_tela, altura_tela, paredes=None):
-        """
-        Movimentação com colisão.
-        'paredes' é uma lista de pygame.Rect (vem da Sala). Se None, só
-        respeita os limites da tela (comportamento antigo).
-        """
-        velocidade = 4
-        paredes = paredes or []
-
-        antigo_x = self.x
-        antigo_y = self.y
-
-        dx = 0
-        dy = 0
-        if teclas[pygame.K_LEFT] or teclas[pygame.K_a]:
-            dx -= velocidade
-        if teclas[pygame.K_RIGHT] or teclas[pygame.K_d]:
-            dx += velocidade
-        if teclas[pygame.K_UP] or teclas[pygame.K_w]:
-            dy -= velocidade
-        if teclas[pygame.K_DOWN] or teclas[pygame.K_s]:
-            dy += velocidade
-
-        self.x += dx
-        if self._colide_com_paredes(paredes):
-            self.x = antigo_x
-
-        self.y += dy
-        if self._colide_com_paredes(paredes):
-            self.y = antigo_y
-
-        if self.x < 0:
-            self.x = 0
-        if self.x > largura_tela - self.largura:
-            self.x = largura_tela - self.largura
-        if self.y < 0:
-            self.y = 0
-        if self.y > altura_tela - self.altura:
-            self.y = altura_tela - self.altura
-
-    def _colide_com_paredes(self, paredes):
-        rect_jogador = self.get_rect()
-        for parede in paredes:
-            if rect_jogador.colliderect(parede):
-                return True
-        return False
+        self.nome = nome
+        self.sanidade = 100.0
+        self.agachado = False
+        self.tem_pe_de_cabra = False
 
     def get_rect(self):
-        return pygame.Rect(self.x, self.y, self.largura, self.altura)
+        if self.agachado:
+            return pygame.Rect(self.x, self.y + 12, 32, 20)
+        return pygame.Rect(self.x, self.y, 32, 32)
 
+    def andar_teclas(self, teclas, largura, altura, paredes):
+        vel = 2.0 if self.agachado else 4.0
+        
+        dx, dy = 0, 0
+        if teclas[pygame.K_LEFT] or teclas[pygame.K_a]: dx = -vel
+        if teclas[pygame.K_RIGHT] or teclas[pygame.K_d]: dx = vel
+        if teclas[pygame.K_UP] or teclas[pygame.K_w]: dy = -vel
+        if teclas[pygame.K_DOWN] or teclas[pygame.K_s]: dy = vel
+
+        self.x += dx
+        self.y += dy
+
+        for p in paredes:
+            if self.get_rect().colliderect(p):
+                self.x -= dx
+                self.y -= dy
+
+    def dano_sanidade(self, valor):
+        self.sanidade -= valor
+        if self.sanidade < 0:
+            self.sanidade = 0
 
 class CameraSeguranca:
-    """
-    Sentinela eletrônica com campo de visão em cone giratório (Semana 5).
-    Se o jogador entrar no cone, conta-se como detectado.
-    """
-
-    def __init__(self, x, y, angulo_inicial=0, alcance=180,
-                 abertura_graus=50, velocidade_giro=0.8, arco_max=60):
+    def __init__(self, x, y, angulo_inicial, alcance, abertura_graus, velocidade_giro, arco_max):
         self.x = x
         self.y = y
-        self.angulo = angulo_inicial    
-        self.alcance = alcance           
-        self.abertura_graus = abertura_graus
-        self.velocidade_giro = velocidade_giro
-        self.arco_max = arco_max         
-        self._direcao_giro = 1
-        self._angulo_base = angulo_inicial
+        self.angulo_atual = angulo_inicial
+        self.angulo_base = angulo_inicial
+        self.alcance = alcance
+        self.abertura = abertura_graus
+        self.vel = velocidade_giro
+        self.arco_max = arco_max
+        self.direcao_giro = 1
 
     def atualizar(self):
-        self.angulo += self.velocidade_giro * self._direcao_giro
+        if self.arco_max > 0:
+            self.angulo_atual += self.vel * self.direcao_giro
+            if abs(self.angulo_atual - self.angulo_base) > self.arco_max:
+                self.direcao_giro *= -1
 
-        limite_superior = self._angulo_base + self.arco_max
-        limite_inferior = self._angulo_base - self.arco_max
-
-        if self.angulo >= limite_superior:
-            self.angulo = limite_superior
-            self._direcao_giro = -1
-        elif self.angulo <= limite_inferior:
-            self.angulo = limite_inferior
-            self._direcao_giro = 1
+    def desenhar(self, surf_base, cone_surf, jogador):
+        pygame.draw.circle(surf_base, (50, 50, 50), (self.x, self.y), 10)
+        pygame.draw.circle(surf_base, (255, 50, 50), (self.x, self.y), 4) # Led vermelho
+        
+        pontos = [(self.x, self.y)]
+        passos = 12
+        ang_inicial = math.radians(self.angulo_atual - self.abertura / 2)
+        ang_final = math.radians(self.angulo_atual + self.abertura / 2)
+        
+        for i in range(passos + 1):
+            ang = ang_inicial + (ang_final - ang_inicial) * (i / passos)
+            px = self.x + math.cos(ang) * self.alcance
+            py = self.y + math.sin(ang) * self.alcance
+            pontos.append((px, py))
+            
+        cor_cone = (255, 50, 50, 70) if self.detecta(jogador) else (255, 255, 100, 50)
+        pygame.draw.polygon(cone_surf, cor_cone, pontos)
 
     def detecta(self, jogador):
-        """Retorna True se o centro do jogador está dentro do cone de visão."""
-        centro_jogador = jogador.get_rect().center
-        dx = centro_jogador[0] - self.x
-        dy = centro_jogador[1] - self.y
-        distancia = math.hypot(dx, dy)
-
-        if distancia > self.alcance:
+        rect = jogador.get_rect()
+        centro_j = rect.center
+        dist = math.hypot(centro_j[0] - self.x, centro_j[1] - self.y)
+        
+        if dist > self.alcance:
             return False
-
-        angulo_para_jogador = math.degrees(math.atan2(dy, dx)) % 360
-        angulo_camera = self.angulo % 360
-
-        diferenca = (angulo_para_jogador - angulo_camera + 180) % 360 - 180
-
-        return abs(diferenca) <= self.abertura_graus / 2
-
-    def pontos_do_cone(self):
-        """Calcula os pontos do polígono do cone, para desenhar na tela."""
-        meia_abertura = self.abertura_graus / 2
-        ang_esq = math.radians(self.angulo - meia_abertura)
-        ang_dir = math.radians(self.angulo + meia_abertura)
-
-        p1 = (self.x, self.y)
-        p2 = (self.x + math.cos(ang_esq) * self.alcance,
-              self.y + math.sin(ang_esq) * self.alcance)
-        p3 = (self.x + math.cos(ang_dir) * self.alcance,
-              self.y + math.sin(ang_dir) * self.alcance)
-
-        return [p1, p2, p3]
+            
+        ang_j = math.degrees(math.atan2(centro_j[1] - self.y, centro_j[0] - self.x))
+        ang_diff = (ang_j - self.angulo_atual + 180) % 360 - 180
+        
+        if abs(ang_diff) <= self.abertura / 2:
+            return True
+        return False
