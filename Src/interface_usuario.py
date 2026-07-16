@@ -1,52 +1,40 @@
 import pygame
 
-BRANCO = (255, 255, 255)
-CIANO_BRILHO = (0, 220, 255)
-DOURADO_BRILHO = (255, 210, 80)
-VERMELHO_SANGUE = (180, 20, 20)
-PRETO_SEMI = (0, 0, 0, 160)
+def desenhar_hud(tela, jogador, fonte):
+    pygame.draw.rect(tela, (40, 40, 45), (20, 20, 200, 20), border_radius=3)
+    largura_sanidade = max(0, (jogador.sanidade / 100) * 200)
+    
+    cor_sanidade = (0, 255, 100) if jogador.sanidade > 60 else ((255, 200, 0) if jogador.sanidade > 30 else (255, 50, 50))
+    if largura_sanidade > 0:
+        pygame.draw.rect(tela, cor_sanidade, (20, 20, largura_sanidade, 20), border_radius=3)
+        
+    pygame.draw.rect(tela, (200, 200, 200), (20, 20, 200, 20), 2, border_radius=3)
+    
+    txt_sanidade = fonte.render(f"SANIDADE: {int(jogador.sanidade)}%", True, (255, 255, 255))
+    tela.blit(txt_sanidade, (25, 45))
 
+    if jogador.tem_pe_de_cabra:
+        txt_item = fonte.render("INVENTÁRIO: Pé de Cabra [Equipado]", True, (150, 220, 255))
+        tela.blit(txt_item, (20, 75))
+    
+    if jogador.agachado:
+        txt_agachado = fonte.render("ESTADO: Agachado (Furtivo)", True, (200, 200, 200))
+        tela.blit(txt_agachado, (20, 100))
 
-def desenhar_hud(surf, jogador, fonte):
-    """HUD principal: sanidade, pílulas e efeito ativo."""
-    pygame.draw.rect(surf, (40, 40, 40), (20, 20, 200, 18), border_radius=3)
-
-    proporcao_barra = int(200 * (jogador.sanidade / 100))
-    cor_barra = CIANO_BRILHO if jogador.efeito_pilula_ativo else VERMELHO_SANGUE
-    if proporcao_barra > 0:
-        pygame.draw.rect(surf, cor_barra, (20, 20, proporcao_barra, 18), border_radius=3)
-
-    txt_sanidade = fonte.render(f"SANIDADE: {int(jogador.sanidade)}%", True, BRANCO)
-    surf.blit(txt_sanidade, (20, 45))
-
-    txt_inventario = fonte.render(f"PÍLULAS: {jogador.quantidade_pilulas}", True, DOURADO_BRILHO)
-    surf.blit(txt_inventario, (20, 70))
-
-    if jogador.efeito_pilula_ativo:
-        txt_efeito = fonte.render("[EFEITO ATIVO]", True, CIANO_BRILHO)
-        surf.blit(txt_efeito, (20, 95))
-
-
-def desenhar_mensagem_contextual(surf, texto, largura_tela, altura_tela, fonte, y=None):
-    """
-    Mensagem central de aviso/objetivo, ex: 'Pressione E para interagir',
-    'Resolva o puzzle para abrir a porta', 'Você foi detectado!'.
-    """
+def desenhar_mensagem_contextual(tela, texto, largura, altura, fonte, y=None):
     if y is None:
-        y = altura_tela - 50
+        y = altura - 60
+        
+    txt = fonte.render(texto, True, (255, 255, 200))
+    rect = txt.get_rect(center=(largura // 2, y))
+    
+    fundo = pygame.Rect(rect.x - 15, rect.y - 8, rect.width + 30, rect.height + 16)
+    pygame.draw.rect(tela, (15, 15, 20, 230), fundo, border_radius=6)
+    pygame.draw.rect(tela, (100, 100, 110), fundo, width=2, border_radius=6)
+    
+    tela.blit(txt, rect)
 
-    txt = fonte.render(texto, True, BRANCO)
-    largura_fundo = txt.get_width() + 24
-    altura_fundo = txt.get_height() + 12
-
-    fundo = pygame.Surface((largura_fundo, altura_fundo), pygame.SRCALPHA)
-    fundo.fill(PRETO_SEMI)
-    surf.blit(fundo, (largura_tela // 2 - largura_fundo // 2, y - altura_fundo // 2))
-    surf.blit(txt, txt.get_rect(center=(largura_tela // 2, y)))
-
-
-def desenhar_flash_detectado(surf, largura_tela, altura_tela, alfa=90):
-    """Flash vermelho de tela cheia ao ser detectado pela câmera."""
-    flash = pygame.Surface((largura_tela, altura_tela), pygame.SRCALPHA)
-    flash.fill((180, 20, 20, alfa))
-    surf.blit(flash, (0, 0))
+def desenhar_flash_detectado(tela, largura, altura):
+    flash = pygame.Surface((largura, altura), pygame.SRCALPHA)
+    flash.fill((255, 0, 0, 120)) # Vermelho translúcido agressivo
+    tela.blit(flash, (0, 0))
