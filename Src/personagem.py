@@ -1,5 +1,6 @@
 import pygame
 import math
+import random
 
 class Jogador:
     def __init__(self, x, y, nome="Operário 724"):
@@ -36,6 +37,42 @@ class Jogador:
         self.sanidade -= valor
         if self.sanidade < 0:
             self.sanidade = 0
+
+class Inimigo():
+    def __init__(self, largura_tela, altura_tela):
+        self.largura_tela = largura_tela
+        self.altura_tela = altura_tela
+        self.tamanho = 20
+        x = random.randint(0, largura_tela - self.tamanho)
+        y = random.randint(-150, -self.tamanho)
+        self.rect = pygame.Rect(x, y, self.tamanho, self.tamanho)
+        self.cor = (255, 255, 255)
+        self.velocidade_y = 4
+        self.velocidade_x = 2
+        self.vida_maxima = 3
+        self.vida = self.vida_maxima
+
+    def tomar_dano(self, quantidade):
+        self.vida -= quantidade
+        if self.vida <= 0:
+            return True
+        return False
+
+    def fora_da_tela(self):
+        return self.rect.top > self.altura_tela
+
+    def desenhar(self, superficie):
+        pygame.draw.rect(superficie, self.cor, self.rect)
+
+    def perseguir(self, jogador=Jogador):
+        if self.x < jogador.x :
+            self.mover('direita')
+        elif self.x > jogador.x :
+            self.mover('esquerda')
+        elif self.y < jogador.y :
+            self.mover('baixo')
+        elif self.y > jogador.y :
+            self.mover('cima')
 
 class CameraSeguranca:
     def __init__(self, x, y, angulo_inicial, alcance, abertura_graus, velocidade_giro, arco_max):

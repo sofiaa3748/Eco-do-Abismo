@@ -16,7 +16,9 @@ class Particula:
             self.y = altura
 
     def desenhar(self, tela):
-        pygame.draw.circle(tela, (self.brilho, self.brilho, self.brilho + 20), (int(self.x), int(self.y)), self.tamanho)
+        brilho_extra = min(255, int(self.brilho) + 20)
+        cor = (int(self.brilho), int(self.brilho), brilho_extra)
+        pygame.draw.circle(tela, cor, (int(self.x), int(self.y)), self.tamanho)
 
 class Botao:
     def __init__(self, x, y, texto, fonte):
