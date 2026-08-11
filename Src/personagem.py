@@ -1,12 +1,31 @@
 import pygame
 import math
 import random
+from abc import ABC, abstractmethod
 
-class Jogador:
-    def __init__(self, x, y, nome="Operário 724"):
+class Personagem(ABC):
+    def __init__(self, x, y, nome):
         self.x = x
         self.y = y
         self.nome = nome
+
+    def atacar(self, personagem):
+        personagem.vida -= self.dano
+
+
+    def tomar_dano(self, quantidade):
+            self.vida -= quantidade
+            if self.vida <= 0:
+                return True
+            return False
+    
+    
+
+class Jogador(Personagem):
+
+    def __init__(self, x, y, nome):
+        super().__init__(x, y, nome)
+        self.nome = 'Operário 724'
         self.sanidade = 100.0
         self.agachado = False
         self.tem_pe_de_cabra = False
@@ -38,7 +57,8 @@ class Jogador:
         if self.sanidade < 0:
             self.sanidade = 0
 
-class Inimigo():
+class Inimigo(Personagem):
+
     def __init__(self, largura_tela, altura_tela):
         self.largura_tela = largura_tela
         self.altura_tela = altura_tela
@@ -52,11 +72,6 @@ class Inimigo():
         self.vida_maxima = 3
         self.vida = self.vida_maxima
 
-    def tomar_dano(self, quantidade):
-        self.vida -= quantidade
-        if self.vida <= 0:
-            return True
-        return False
 
     def fora_da_tela(self):
         return self.rect.top > self.altura_tela
@@ -74,7 +89,7 @@ class Inimigo():
         elif self.y > jogador.y :
             self.mover('cima')
 
-class CameraSeguranca:
+class CameraSeguranca(Personagem):
     def __init__(self, x, y, angulo_inicial, alcance, abertura_graus, velocidade_giro, arco_max):
         self.x = x
         self.y = y
