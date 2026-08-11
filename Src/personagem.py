@@ -1,11 +1,30 @@
 import pygame
 import math
+from abc import ABC, abstractmethod
 
-class Jogador:
-    def __init__(self, x, y, nome="Operário 724"):
+class Personagem(ABC):
+
+    def __init__(self, x, y, nome):
         self.x = x
         self.y = y
         self.nome = nome
+
+    def atacar(self, personagem):
+        personagem.vida -= self.dano
+
+
+    def tomar_dano(self, quantidade):
+            self.vida -= quantidade
+            if self.vida <= 0:
+                return True
+            return False
+
+
+class Jogador(Personagem):
+
+    def __init__(self, x, y, nome):
+        super().__init__(x, y, nome)
+        self.nome = 'Operário 724'
         self.sanidade = 100.0
         self.agachado = False
         self.tem_pe_de_cabra = False
@@ -37,7 +56,43 @@ class Jogador:
         if self.sanidade < 0:
             self.sanidade = 0
 
-class CameraSeguranca:
+    def atacar(self, personagem):
+        return super().atacar(personagem)
+
+class Inimigo(Personagem):
+
+    def __init__(self, x, y, nome, largura_tela, altura_tela):
+        super().__init__(x, y, nome)
+        self.largura_tela = largura_tela
+        self.altura_tela = altura_tela
+        self.tamanho = 20
+        self.rect = pygame.Rect(x, y, self.tamanho, self.tamanho)
+        self.cor = (255, 255, 255)
+        self.vida = 120.0
+
+    def atacar(self, personagem):
+        return super().atacar(personagem)
+
+    def fora_da_tela(self):
+        return self.rect.top > self.altura_tela
+
+    def desenhar(self, superficie):
+        pygame.draw.rect(superficie, self.cor, self.rect)
+
+    def perseguir(self, jogador=Jogador):
+        if self.x < jogador.x :
+            self.mover('direita')
+        elif self.x > jogador.x :
+            self.mover('esquerda')
+        elif self.y < jogador.y :
+            self.mover('baixo')
+        elif self.y > jogador.y :
+            self.mover('cima')
+
+    def tomar_dano(self, quantidade):
+        return super().tomar_dano(quantidade)
+
+class CameraSeguranca(Personagem):
     def __init__(self, x, y, angulo_inicial, alcance, abertura_graus, velocidade_giro, arco_max):
         self.x = x
         self.y = y
@@ -57,7 +112,7 @@ class CameraSeguranca:
 
     def desenhar(self, surf_base, cone_surf, jogador):
         pygame.draw.circle(surf_base, (50, 50, 50), (self.x, self.y), 10)
-        pygame.draw.circle(surf_base, (255, 50, 50), (self.x, self.y), 4) # Led vermelho
+        pygame.draw.circle(surf_base, (255, 50, 50), (self.x, self.y), 4)
         
         pontos = [(self.x, self.y)]
         passos = 12
