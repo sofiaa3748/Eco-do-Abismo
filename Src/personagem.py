@@ -1,9 +1,9 @@
 import pygame
 import math
-import random
 from abc import ABC, abstractmethod
 
 class Personagem(ABC):
+
     def __init__(self, x, y, nome):
         self.x = x
         self.y = y
@@ -18,8 +18,7 @@ class Personagem(ABC):
             if self.vida <= 0:
                 return True
             return False
-    
-    
+
 
 class Jogador(Personagem):
 
@@ -57,21 +56,22 @@ class Jogador(Personagem):
         if self.sanidade < 0:
             self.sanidade = 0
 
+    def atacar(self, personagem):
+        return super().atacar(personagem)
+
 class Inimigo(Personagem):
 
-    def __init__(self, largura_tela, altura_tela):
+    def __init__(self, x, y, nome, largura_tela, altura_tela):
+        super().__init__(x, y, nome)
         self.largura_tela = largura_tela
         self.altura_tela = altura_tela
         self.tamanho = 20
-        x = random.randint(0, largura_tela - self.tamanho)
-        y = random.randint(-150, -self.tamanho)
         self.rect = pygame.Rect(x, y, self.tamanho, self.tamanho)
         self.cor = (255, 255, 255)
-        self.velocidade_y = 4
-        self.velocidade_x = 2
-        self.vida_maxima = 3
-        self.vida = self.vida_maxima
+        self.vida = 120.0
 
+    def atacar(self, personagem):
+        return super().atacar(personagem)
 
     def fora_da_tela(self):
         return self.rect.top > self.altura_tela
@@ -88,6 +88,9 @@ class Inimigo(Personagem):
             self.mover('baixo')
         elif self.y > jogador.y :
             self.mover('cima')
+
+    def tomar_dano(self, quantidade):
+        return super().tomar_dano(quantidade)
 
 class CameraSeguranca(Personagem):
     def __init__(self, x, y, angulo_inicial, alcance, abertura_graus, velocidade_giro, arco_max):
@@ -109,7 +112,7 @@ class CameraSeguranca(Personagem):
 
     def desenhar(self, surf_base, cone_surf, jogador):
         pygame.draw.circle(surf_base, (50, 50, 50), (self.x, self.y), 10)
-        pygame.draw.circle(surf_base, (255, 50, 50), (self.x, self.y), 4) # Led vermelho
+        pygame.draw.circle(surf_base, (255, 50, 50), (self.x, self.y), 4)
         
         pontos = [(self.x, self.y)]
         passos = 12
