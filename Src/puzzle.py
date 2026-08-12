@@ -87,3 +87,53 @@ class PuzzleRadio:
 
             txt_ajuda = fonte.render("Use SETAS ou A/D para sintonizar", True, (160, 160, 170))
             surf.blit(txt_ajuda, txt_ajuda.get_rect(center=(self.largura // 2, self.rect_painel.bottom + 35)))
+
+class CaixaArrastavel:
+    """Caixas de madeira que bloqueiam o caminho e podem ser arrastadas com R."""
+    def __init__(self, x, y):
+        self.rect = pygame.Rect(x, y, 55, 55)
+
+    def desenhar(self, surf):
+        pygame.draw.rect(surf, (105, 70, 45), self.rect, border_radius=4)
+        pygame.draw.rect(surf, (65, 40, 25), self.rect, width=3, border_radius=4)
+        pygame.draw.line(surf, (65, 40, 25), self.rect.topleft, self.rect.bottomright, 2)
+        pygame.draw.line(surf, (65, 40, 25), self.rect.topright, self.rect.bottomleft, 2)
+
+class PuzzleCaixaFerramentas:
+    """Mini-puzzle visual para revirar a caixa de ferramentas e achar o pé de cabra."""
+    def __init__(self, largura, altura):
+        self.largura = largura
+        self.altura = altura
+        self.ativo = False
+        self.resolvido = False
+        self.etapa = 0 
+
+    def atualizar(self, teclas_press):
+        if self.ativo:
+            if self.etapa < 2:
+                self.etapa += 1
+            else:
+                self.resolvido = True
+                self.ativo = False
+
+    def desenhar(self, surf, fonte):
+        overlay = pygame.Surface((self.largura, self.altura), pygame.SRCALPHA)
+        overlay.fill((15, 10, 10, 235))
+        surf.blit(overlay, (0, 0))
+
+        painel = pygame.Rect(self.largura // 2 - 220, self.altura // 2 - 130, 440, 260)
+        pygame.draw.rect(surf, (120, 30, 30), painel, border_radius=10)
+        pygame.draw.rect(surf, (50, 15, 15), painel, width=4, border_radius=10)
+
+        if self.etapa == 0:
+            txt1 = fonte.render("CAIXA DE FERRAMENTAS ENCONTRADA", True, (255, 255, 255))
+            txt2 = fonte.render("Pressione [ESPAÇO] para abrir as travas...", True, (200, 200, 200))
+        elif self.etapa == 1:
+            txt1 = fonte.render("REVIRANDO COMPARTIMENTOS...", True, (255, 210, 0))
+            txt2 = fonte.render("Pressione [ESPAÇO] para procurar no fundo...", True, (200, 200, 200))
+        else:
+            txt1 = fonte.render("VOCÊ ENCONTROU O PÉ DE CABRA!", True, (0, 255, 100))
+            txt2 = fonte.render("Pressione [ESPAÇO] para guardar no inventário.", True, (255, 255, 255))
+
+        surf.blit(txt1, txt1.get_rect(center=(self.largura // 2, self.altura // 2 - 20)))
+        surf.blit(txt2, txt2.get_rect(center=(self.largura // 2, self.altura // 2 + 30)))

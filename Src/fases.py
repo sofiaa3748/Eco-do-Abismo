@@ -2,112 +2,116 @@ import pygame
 import random
 from configuracoes import LARGURA, ALTURA, AZUL_ESCURO, BRANCO, CINZA_BORDA
 from nivel import Sala
-from personagem import CameraSeguranca
-from puzzle import PuzzleRadio
+from personagem import CameraSeguranca, Inimigo
 from itens import gerar_frascos_na_sala
 from interface_usuario import desenhar_hud, desenhar_mensagem_contextual, desenhar_flash_detectado
-
-class CaixaArrastavel:
-    """Caixas de madeira que bloqueiam o caminho e podem ser arrastadas com R."""
-    def __init__(self, x, y):
-        self.rect = pygame.Rect(x, y, 55, 55)
-
-    def desenhar(self, surf):
-        pygame.draw.rect(surf, (105, 70, 45), self.rect, border_radius=4)
-        pygame.draw.rect(surf, (65, 40, 25), self.rect, width=3, border_radius=4)
-        pygame.draw.line(surf, (65, 40, 25), self.rect.topleft, self.rect.bottomright, 2)
-        pygame.draw.line(surf, (65, 40, 25), self.rect.topright, self.rect.bottomleft, 2)
-
-class PuzzleCaixaFerramentas:
-    """Mini-puzzle visual para revirar a caixa de ferramentas e achar o pé de cabra."""
-    def __init__(self, largura, altura):
-        self.largura = largura
-        self.altura = altura
-        self.ativo = False
-        self.resolvido = False
-        self.etapa = 0 
-
-    def atualizar(self, teclas_press):
-        if self.ativo:
-            if self.etapa < 2:
-                self.etapa += 1
-            else:
-                self.resolvido = True
-                self.ativo = False
-
-    def desenhar(self, surf, fonte):
-        overlay = pygame.Surface((self.largura, self.altura), pygame.SRCALPHA)
-        overlay.fill((15, 10, 10, 235))
-        surf.blit(overlay, (0, 0))
-
-        painel = pygame.Rect(self.largura // 2 - 220, self.altura // 2 - 130, 440, 260)
-        pygame.draw.rect(surf, (120, 30, 30), painel, border_radius=10)
-        pygame.draw.rect(surf, (50, 15, 15), painel, width=4, border_radius=10)
-
-        if self.etapa == 0:
-            txt1 = fonte.render("CAIXA DE FERRAMENTAS ENCONTRADA", True, (255, 255, 255))
-            txt2 = fonte.render("Pressione [ESPAÇO] para abrir as travas...", True, (200, 200, 200))
-        elif self.etapa == 1:
-            txt1 = fonte.render("REVIRANDO COMPARTIMENTOS...", True, (255, 210, 0))
-            txt2 = fonte.render("Pressione [ESPAÇO] para procurar no fundo...", True, (200, 200, 200))
-        else:
-            txt1 = fonte.render("VOCÊ ENCONTROU O PÉ DE CABRA!", True, (0, 255, 100))
-            txt2 = fonte.render("Pressione [ESPAÇO] para guardar no inventário.", True, (255, 255, 255))
-
-        surf.blit(txt1, txt1.get_rect(center=(self.largura // 2, self.altura // 2 - 20)))
-        surf.blit(txt2, txt2.get_rect(center=(self.largura // 2, self.altura // 2 + 30)))
+from puzzle import CaixaArrastavel, PuzzleCaixaFerramentas, PuzzleRadio
 
 
-def iniciar_sala(jogador, nivel, resetar_jogador=False):
-    if nivel == 1 or resetar_jogador:
+def nivel_1(jogador, resetar_jogador=False):
+    jogador.sanidade = 100
+    jogador.tem_pe_de_cabra = False
+    jogador.agachado = False
+
+    sala = Sala(LARGURA, ALTURA, ponto_entrada=(60, ALTURA // 2 - 16))
+    jogador.x, jogador.y = sala.ponto_entrada
+
+    cameras = [
+        CameraSeguranca(x=LARGURA - 40, y=40, angulo_inicial=135,
+                         alcance=260, abertura_graus=50,
+                         velocidade_giro=0.5, arco_max=35)
+    ]
+    caixas = []
+    caixa_ferramentas = None
+    duto_dados = None
+
+    frascos = gerar_frascos_na_sala(1)
+    puzzle = PuzzleRadio(LARGURA, ALTURA)
+    puzzle_caixa = PuzzleCaixaFerramentas(LARGURA, ALTURA)
+
+    inimigos = []
+    return sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa, inimigos
+
+
+def nivel_2(jogador, resetar_jogador=False):
+    if resetar_jogador:
         jogador.sanidade = 100
         jogador.tem_pe_de_cabra = False
         jogador.agachado = False
 
     sala = Sala(LARGURA, ALTURA, ponto_entrada=(60, ALTURA // 2 - 16))
     jogador.x, jogador.y = sala.ponto_entrada
-    
-    cameras = []
-    caixas = []
-    caixa_ferramentas = None
-    
+    sala.porta_aberta = False
+
+    cameras = [
+        CameraSeguranca(x=430, y=40, angulo_inicial=90, alcance=500,
+                         abertura_graus=32, velocidade_giro=0.0, arco_max=0)
+    ]
+
+    caixas = [
+        CaixaArrastavel(70, ALTURA - 90),
+        CaixaArrastavel(70, ALTURA - 145),
+    ]
+    caixa_ferramentas = pygame.Rect(75, ALTURA - 85, 30, 20)
+
     duto_dados = {
-        "corredor": pygame.Rect(280, 45, 260, 45), 
+        "corredor": pygame.Rect(280, 45, 260, 45),
         "porta_entrada_aberta": False,
         "porta_saida_aberta": False,
         "rect_entrada": pygame.Rect(280, 45, 15, 45),
-        "rect_saida": pygame.Rect(525, 45, 15, 45)
+        "rect_saida": pygame.Rect(525, 45, 15, 45),
     }
 
-    if nivel == 1:
-        frascos = gerar_frascos_na_sala(1)
-        cameras.append(CameraSeguranca(x=LARGURA - 40, y=40, angulo_inicial=135, alcance=260, abertura_graus=50, velocidade_giro=0.5, arco_max=35))
-    
-    elif nivel == 2:
-        frascos = gerar_frascos_na_sala(2)
-        
-        cameras.append(CameraSeguranca(x=430, y=40, angulo_inicial=90, alcance=500, abertura_graus=32, velocidade_giro=0.0, arco_max=0))
-
-        caixa_ferramentas = pygame.Rect(75, ALTURA - 85, 30, 20)
-        caixas.append(CaixaArrastavel(70, ALTURA - 90))
-        caixas.append(CaixaArrastavel(70, ALTURA - 145))
-        
-        sala.porta_aberta = False
-        
-    elif nivel == 3:
-        frascos = gerar_frascos_na_sala(3)
-        cameras.append(CameraSeguranca(x=40, y=40, angulo_inicial=45, alcance=220, abertura_graus=50, velocidade_giro=1.3, arco_max=40))
-        cameras.append(CameraSeguranca(x=LARGURA - 40, y=40, angulo_inicial=135, alcance=220, abertura_graus=50, velocidade_giro=1.3, arco_max=40))
-    else:
-        frascos = gerar_frascos_na_sala(2)
-
+    frascos = gerar_frascos_na_sala(2)
     puzzle = PuzzleRadio(LARGURA, ALTURA)
     puzzle_caixa = PuzzleCaixaFerramentas(LARGURA, ALTURA)
-    
-    return sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa
+    inimigos = []
+    return sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa, inimigos
 
 
-def renderizar_jogo(tela, jogador, sala, frascos, cameras, puzzle, puzzle_aberto, nivel_atual, offset_x, offset_y, flash_ativo, LARGURA, ALTURA, fonte_sub, caixa_ferramentas=None, caixas=[], duto_dados=None, puzzle_caixa=None):
+def nivel_3(jogador, resetar_jogador=False):
+    if resetar_jogador:
+        jogador.sanidade = 100
+        jogador.tem_pe_de_cabra = False
+        jogador.agachado = False
+
+    sala = Sala(LARGURA, ALTURA, ponto_entrada=(60, ALTURA // 2 - 16))
+    jogador.x, jogador.y = sala.ponto_entrada
+
+    cameras = [
+        CameraSeguranca(x=40, y=40, angulo_inicial=45, alcance=220,
+                         abertura_graus=50, velocidade_giro=1.3, arco_max=40),
+        CameraSeguranca(x=LARGURA - 40, y=40, angulo_inicial=135, alcance=220,
+                         abertura_graus=50, velocidade_giro=1.3, arco_max=40),
+    ]
+
+    inimigos = [Inimigo(x=400, y=300, nome='inimigo_1', largura_tela=LARGURA, altura_tela=ALTURA)]
+
+    caixas = []
+    caixa_ferramentas = None
+    duto_dados = None
+
+    frascos = gerar_frascos_na_sala(3)
+    puzzle = PuzzleRadio(LARGURA, ALTURA)
+    puzzle_caixa = PuzzleCaixaFerramentas(LARGURA, ALTURA)
+
+    return sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa, inimigos
+
+NIVEIS = {
+    1: nivel_1,
+    2: nivel_2,
+    3: nivel_3,
+}
+
+def iniciar_sala(jogador, nivel, resetar_jogador=False):
+    fn = NIVEIS.get(nivel, nivel_2)
+    return fn(jogador, resetar_jogador=resetar_jogador)
+
+
+def renderizar_jogo(tela, jogador, sala, frascos, cameras, puzzle, puzzle_aberto, nivel_atual, offset_x, offset_y, flash_ativo, LARGURA, ALTURA, fonte_sub, caixa_ferramentas=None, caixas=None, duto_dados=None, puzzle_caixa=None, inimigos=None):
+
+    inimigos = inimigos if not None else []
+    caixas = caixas if not None else []
     superficie_fase = pygame.Surface((LARGURA, ALTURA))
     superficie_fase.fill(AZUL_ESCURO)
     cone_surf = pygame.Surface((LARGURA, ALTURA), pygame.SRCALPHA)
@@ -140,6 +144,9 @@ def renderizar_jogo(tela, jogador, sala, frascos, cameras, puzzle, puzzle_aberto
 
     for cx in caixas:
         cx.desenhar(superficie_fase)
+
+    for inimigo in inimigos:
+        inimigo.desenhar(superficie_fase)
 
     for camera in cameras:
         camera.desenhar(superficie_fase, cone_surf, jogador)

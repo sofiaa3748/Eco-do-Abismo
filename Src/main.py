@@ -6,7 +6,6 @@ from configuracoes import LARGURA, ALTURA
 from personagem import Jogador
 from menu import Particula, criar_botoes, desenhar_fundo, desenhar_titulo
 from fases import iniciar_sala, renderizar_jogo
-
 def main():
     pygame.init()
     tela = pygame.display.set_mode((LARGURA, ALTURA))
@@ -33,7 +32,7 @@ def main():
     jogador = Jogador(100, 300, "Operário 724")
     jogador.agachado = False
     jogador.tem_pe_de_cabra = False
-    
+
     sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa = iniciar_sala(jogador, nivel=nivel_atual)
 
     offset_tremor_x, offset_tremor_y = 0, 0
@@ -72,7 +71,7 @@ def main():
                             if puzzle_caixa.resolvido:
                                 jogador.tem_pe_de_cabra = True
 
-                    if evento.key == pygame.K_q and nivel_atual == 2:
+                    if evento.key == pygame.K_q and duto_dados:
                         jogador.agachado = not jogador.agachado
 
                     if evento.key == pygame.K_e and not puzzle.ativo and not puzzle_caixa.ativo:
@@ -81,7 +80,7 @@ def main():
                                 f.coletado = True
                                 jogador.sanidade = min(100.0, jogador.sanidade + 10)
 
-                        if nivel_atual == 2:
+                        if duto_dados:
                             rect_p = jogador.get_rect()
                             if rect_p.colliderect(duto_dados["rect_entrada"].inflate(25, 25)):
                                 if jogador.tem_pe_de_cabra and not duto_dados["porta_entrada_aberta"]:
@@ -98,7 +97,7 @@ def main():
                                 if not coberta:
                                     puzzle_caixa.ativo = True
 
-                        if nivel_atual != 2 and not sala.porta_aberta and sala.jogador_na_porta(jogador):
+                        if not duto_dados and not sala.porta_aberta and sala.jogador_na_porta(jogador):
                             puzzle.ativo = True
 
         if estado == "MENU":
@@ -110,13 +109,13 @@ def main():
                 puzzle.atualizar(teclas)
                 if puzzle.resolvido: sala.porta_aberta = True
             elif puzzle_caixa.ativo:
-                pass # Tratado no evento do teclado
+                pass
             else:
                 if jogador.agachado:
                     jogador_rect_futuro = pygame.Rect(jogador.x, jogador.y, 32, 20)
                 else:
                     jogador_rect_futuro = pygame.Rect(jogador.x, jogador.y, 32, 32)
-  
+
                 vel = 2.0 if jogador.agachado else 4.0
                 dx, dy = 0, 0
                 if teclas[pygame.K_LEFT] or teclas[pygame.K_a]: dx = -vel
@@ -124,7 +123,7 @@ def main():
                 if teclas[pygame.K_UP] or teclas[pygame.K_w]: dy = -vel
                 if teclas[pygame.K_DOWN] or teclas[pygame.K_s]: dy = vel
 
-                if teclas[pygame.K_r] and nivel_atual == 2:
+                if teclas[pygame.K_r] and caixas:
                     jogador_hitbox_exp = jogador_rect_futuro.inflate(15, 15)
                     for cx in caixas:
                         if jogador_hitbox_exp.colliderect(cx.rect):
@@ -137,8 +136,8 @@ def main():
                 jogador.y += dy
 
                 p_rect = pygame.Rect(jogador.x, jogador.y, jogador_rect_futuro.width, jogador_rect_futuro.height)
-                
-                if nivel_atual == 2:
+
+                if duto_dados:
                     if not jogador.agachado:
                         if p_rect.colliderect(duto_dados["corredor"]):
                             jogador.x -= dx
@@ -163,7 +162,7 @@ def main():
                 jogador.x = max(40, min(LARGURA - 75, jogador.x))
                 jogador.y = max(40, min(ALTURA - 75, jogador.y))
 
-                jogador.dano_sanidade(0.008) 
+                jogador.dano_sanidade(0.008)
 
                 for camera in cameras:
                     camera.atualizar()
@@ -178,7 +177,7 @@ def main():
                 if mensagem_flash_ativo and tempo - tempo_flash > 250:
                     mensagem_flash_ativo = False
 
-                if nivel_atual == 2:
+                if duto_dados:
                     if duto_dados["porta_saida_aberta"] and jogador.x > duto_dados["rect_saida"].x:
                         nivel_atual += 1
                         sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa = iniciar_sala(jogador, nivel_atual, resetar_jogador=False)
@@ -201,16 +200,15 @@ def main():
             for p in particulas: p.desenhar(tela)
             desenhar_titulo(tela, tempo, LARGURA, fonte_titulo, fonte_subtitulo)
             for botao in botoes: botao.desenhar(tela)
-            
+
             rodape = fonte_subtitulo.render("© 2026  Eco do Abismo", True, (40, 70, 100))
             tela.blit(rodape, rodape.get_rect(center=(LARGURA // 2, ALTURA - 20)))
 
         elif estado == "JOGANDO":
             renderizar_jogo(
-                tela, jogador, sala, frascos, cameras, puzzle, puzzle.ativo, 
-                nivel_atual, offset_tremor_x, offset_tremor_y, mensagem_flash_ativo, 
-                LARGURA, ALTURA, fonte_subtitulo, caixa_ferramentas, caixas, duto_dados, puzzle_caixa
-            )
+                tela, jogador, sala, frascos, cameras, puzzle, puzzle.ativo,
+                nivel_atual, offset_tremor_x, offset_tremor_y, mensagem_flash_ativo,
+                LARGURA, ALTURA, fonte_subtitulo, caixa_ferramentas, caixas, duto_dados, puzzle_caixa, inimigos)
 
         pygame.display.flip()
         relogio.tick(60)

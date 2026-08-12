@@ -80,8 +80,10 @@ class Jogador(Personagem):
         self.x = max(0, min(self.x, largura - 32))
         self.y = max(0, min(self.y, altura - 32))
 
-    def tomar_dano(self, quantidade):
-        return super().tomar_dano(quantidade)
+    def dano_sanidade(self, valor):
+        self.sanidade -= valor
+        if self.sanidade < 0:
+            self.sanidade = 0
  
     def atacar(self, personagem):
         return super().atacar(personagem)
