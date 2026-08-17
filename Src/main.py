@@ -33,7 +33,7 @@ def main():
     jogador.agachado = False
     jogador.tem_pe_de_cabra = False
 
-    sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa = iniciar_sala(jogador, nivel=nivel_atual)
+    sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa, inimigos = iniciar_sala(jogador, nivel=nivel_atual)
 
     offset_tremor_x, offset_tremor_y = 0, 0
     mensagem_flash_ativo = False
