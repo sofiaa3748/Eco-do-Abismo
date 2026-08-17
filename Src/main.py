@@ -51,11 +51,11 @@ def main():
             if estado == "MENU":
                 for botao in botoes:
                     if botao.clicado(evento):
-                        if botao.texto.endswith("JOGAR"):
+                        if "JOGAR" in botao.texto:
                             estado = "JOGANDO"
                             nivel_atual = 1
-                            sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa = iniciar_sala(jogador, nivel_atual)
-                        elif botao.texto.endswith("SAIR"):
+                            sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa, inimigos = iniciar_sala(jogador, nivel_atual)
+                        elif "SAIR" in botao.texto:
                             rodando = False
 
             elif estado == "JOGANDO":
