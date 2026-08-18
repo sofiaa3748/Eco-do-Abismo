@@ -1,65 +1,222 @@
 import pygame
+import sys
 import random
-import math
 
-class Particula:
-    def __init__(self, largura, altura):
-        self.x = random.randint(0, largura)
-        self.y = random.randint(0, altura)
-        self.vy = random.uniform(-0.3, -1.5)
-        self.tamanho = random.randint(1, 4)
-        self.brilho = random.randint(100, 255)
+from configuracoes import LARGURA, ALTURA
+from personagem import Jogador
+from menu import Particula, criar_botoes, desenhar_fundo, desenhar_titulo
+from fases import iniciar_sala, renderizar_jogo
 
-    def atualizar(self, altura):
-        self.y += self.vy
-        if self.y < 0:
-            self.y = altura
 
-    def desenhar(self, tela):
-        brilho_extra = min(255, int(self.brilho) + 20)
-        cor = (int(self.brilho), int(self.brilho), brilho_extra)
-        pygame.draw.circle(tela, cor, (int(self.x), int(self.y)), self.tamanho)
+def main():
+    pygame.init()
+    tela = pygame.display.set_mode((LARGURA, ALTURA))
+    pygame.display.set_caption("Eco do Abismo")
 
-class Botao:
-    def __init__(self, x, y, texto, fonte):
-        self.texto = texto
-        self.fonte = fonte
-        self.imagem = self.fonte.render(self.texto, True, (255, 255, 255))
-        self.rect = self.imagem.get_rect(center=(x, y))
-        self.hover = False
+    try:
+        fonte_titulo = pygame.font.SysFont("consolas", 64, bold=True)
+        fonte_subtitulo = pygame.font.SysFont("consolas", 20)
+        fonte_botao = pygame.font.SysFont("consolas", 26, bold=True)
+    except:
+        fonte_titulo = pygame.font.SysFont(None, 64)
+        fonte_subtitulo = pygame.font.SysFont(None, 20)
+        fonte_botao = pygame.font.SysFont(None, 26)
 
-    def atualizar(self, mouse_pos):
-        self.hover = self.rect.inflate(20, 10).collidepoint(mouse_pos)
+    relogio = pygame.time.Clock()
 
-    def desenhar(self, tela):
-        cor_fundo = (60, 120, 200) if self.hover else (40, 60, 90)
-        pygame.draw.rect(tela, cor_fundo, self.rect.inflate(40, 20), border_radius=8)
-        pygame.draw.rect(tela, (200, 220, 255), self.rect.inflate(40, 20), width=2, border_radius=8)
-        tela.blit(self.imagem, self.rect)
+    particulas = [Particula(LARGURA, ALTURA) for _ in range(90)]
+    botoes = criar_botoes(LARGURA // 2, fonte_botao)
 
-    def clicado(self, evento):
-        if evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1:
-            if self.hover:
-                return True
-        return False
+    rodando = True
+    estado = "MENU"
+    nivel_atual = 1
 
-def criar_botoes(centro_x, fonte):
-    return [
-        Botao(centro_x, 380, " INICIAR JOGAR ", fonte),
-        Botao(centro_x, 460, " SAIR DO JOGO ", fonte)
-    ]
+    jogador = Jogador(100, 300, "Operário 724")
+    jogador.agachado = False
+    jogador.tem_pe_de_cabra = False
 
-def desenhar_fundo(tela, tempo, largura, altura):
-    tela.fill((10, 12, 18)) # Fundo bem escuro
-    
-def desenhar_titulo(tela, tempo, largura, fonte_titulo, fonte_sub):
-    oscilacao = math.sin(tempo / 400) * 8
-    
-    txt = fonte_titulo.render("ECO DO ABISMO", True, (220, 230, 255))
-    sombra = fonte_titulo.render("ECO DO ABISMO", True, (50, 50, 80))
-    
-    tela.blit(sombra, sombra.get_rect(center=(largura // 2 + 4, 150 + oscilacao + 4)))
-    tela.blit(txt, txt.get_rect(center=(largura // 2, 150 + oscilacao)))
-    
-    sub = fonte_sub.render("Sobreviva às câmeras e mantenha sua sanidade...", True, (130, 140, 160))
-    tela.blit(sub, sub.get_rect(center=(largura // 2, 230 + oscilacao)))
+    sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa, inimigos = iniciar_sala(jogador, nivel=nivel_atual)
+
+    offset_tremor_x, offset_tremor_y = 0, 0
+    mensagem_flash_ativo = False
+    tempo_flash = 0
+
+    while rodando:
+        tempo = pygame.time.get_ticks()
+        mouse = pygame.mouse.get_pos()
+        teclas = pygame.key.get_pressed()
+
+        for evento in pygame.event.get():
+            if evento.type == pygame.QUIT:
+                rodando = False
+
+            if estado == "MENU":
+                for botao in botoes:
+                    if botao.clicado(evento):
+                        if "JOGAR" in botao.texto:
+                            estado = "JOGANDO"
+                            nivel_atual = 1
+                            sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa, inimigos = iniciar_sala(jogador, nivel_atual)
+                        elif "SAIR" in botao.texto:
+                            rodando = False
+
+            elif estado == "JOGANDO":
+                if evento.type == pygame.KEYDOWN:
+                    if evento.key == pygame.K_ESCAPE:
+                        if puzzle.ativo: puzzle.ativo = False
+                        elif puzzle_caixa.ativo: puzzle_caixa.ativo = False
+                        else: estado = "MENU"
+
+                    if evento.key == pygame.K_SPACE:
+                        if puzzle_caixa.ativo:
+                            puzzle_caixa.atualizar(teclas)
+                            if puzzle_caixa.resolvido:
+                                jogador.tem_pe_de_cabra = True
+
+                    if evento.key == pygame.K_q and duto_dados:
+                        jogador.agachado = not jogador.agachado
+
+                    if evento.key == pygame.K_e and not puzzle.ativo and not puzzle_caixa.ativo:
+                        for f in frascos:
+                            if not f.coletado and jogador.get_rect().colliderect(f.rect):
+                                f.coletado = True
+                                jogador.sanidade = min(100.0, jogador.sanidade + 10)
+
+                        if duto_dados:
+                            rect_p = jogador.get_rect()
+                            if rect_p.colliderect(duto_dados["rect_entrada"].inflate(25, 25)):
+                                if jogador.tem_pe_de_cabra and not duto_dados["porta_entrada_aberta"]:
+                                    duto_dados["porta_entrada_aberta"] = True
+
+                            elif rect_p.colliderect(duto_dados["rect_saida"].inflate(25, 25)):
+                                if jogador.tem_pe_de_cabra and not duto_dados["porta_saida_aberta"]:
+                                    duto_dados["porta_saida_aberta"] = True
+
+                            elif caixa_ferramentas and rect_p.colliderect(caixa_ferramentas.inflate(15, 15)) and not jogador.tem_pe_de_cabra:
+                                coberta = False
+                                for cx in caixas:
+                                    if cx.rect.colliderect(caixa_ferramentas): coberta = True
+                                if not coberta:
+                                    puzzle_caixa.ativo = True
+
+                        if not duto_dados and not sala.porta_aberta and sala.jogador_na_porta(jogador):
+                            puzzle.ativo = True
+
+        if estado == "MENU":
+            for p in particulas: p.atualizar(ALTURA)
+            for botao in botoes: botao.atualizar(mouse)
+
+        elif estado == "JOGANDO":
+            if puzzle.ativo:
+                puzzle.atualizar(teclas)
+                if puzzle.resolvido: sala.porta_aberta = True
+            elif puzzle_caixa.ativo:
+                pass
+            else:
+                if jogador.agachado:
+                    jogador_rect_futuro = pygame.Rect(jogador.x, jogador.y, 32, 20)
+                else:
+                    jogador_rect_futuro = pygame.Rect(jogador.x, jogador.y, 32, 32)
+
+                vel = 2.0 if jogador.agachado else 4.0
+                dx, dy = 0, 0
+                if teclas[pygame.K_LEFT] or teclas[pygame.K_a]: dx = -vel
+                if teclas[pygame.K_RIGHT] or teclas[pygame.K_d]: dx = vel
+                if teclas[pygame.K_UP] or teclas[pygame.K_w]: dy = -vel
+                if teclas[pygame.K_DOWN] or teclas[pygame.K_s]: dy = vel
+
+                if teclas[pygame.K_r] and caixas:
+                    jogador_hitbox_exp = jogador_rect_futuro.inflate(15, 15)
+                    for cx in caixas:
+                        if jogador_hitbox_exp.colliderect(cx.rect):
+                            cx.rect.x += dx
+                            cx.rect.y += dy
+                            cx.rect.x = max(40, min(LARGURA - 95, cx.rect.x))
+                            cx.rect.y = max(40, min(ALTURA - 95, cx.rect.y))
+
+                jogador.x += dx
+                jogador.y += dy
+
+                p_rect = pygame.Rect(jogador.x, jogador.y, jogador_rect_futuro.width, jogador_rect_futuro.height)
+
+                if duto_dados:
+                    if not jogador.agachado:
+                        if p_rect.colliderect(duto_dados["corredor"]):
+                            jogador.x -= dx
+                            jogador.y -= dy
+                    else:
+                        if not duto_dados["porta_entrada_aberta"] and p_rect.colliderect(duto_dados["rect_entrada"]):
+                            jogador.x -= dx
+                        if not duto_dados["porta_saida_aberta"] and p_rect.colliderect(duto_dados["rect_saida"]):
+                            jogador.x -= dx
+
+                    for parede in sala.paredes_colisao():
+                        if jogador.agachado and duto_dados["corredor"].contains(p_rect):
+                            continue
+                        if p_rect.colliderect(parede):
+                            jogador.x -= dx
+                            jogador.y -= dy
+                else:
+                    jogador.x -= dx
+                    jogador.y -= dy
+                    jogador.andar_teclas(teclas, LARGURA, ALTURA, paredes=sala.paredes_colisao())
+
+                jogador.x = max(40, min(LARGURA - 75, jogador.x))
+                jogador.y = max(40, min(ALTURA - 75, jogador.y))
+
+                jogador.dano_sanidade(0.008)
+
+                for camera in cameras:
+                    camera.atualizar()
+                    if duto_dados and duto_dados["corredor"].contains(jogador.get_rect()):
+                        continue
+                    if camera.detecta(jogador):
+                        mensagem_flash_ativo = True
+                        tempo_flash = tempo
+                        jogador.x, jogador.y = sala.ponto_entrada
+                        jogador.agachado = False
+
+                if mensagem_flash_ativo and tempo - tempo_flash > 250:
+                    mensagem_flash_ativo = False
+
+                if duto_dados:
+                    if duto_dados["porta_saida_aberta"] and jogador.x > duto_dados["rect_saida"].x:
+                        nivel_atual += 1
+                        sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa, inimigos = iniciar_sala(jogador, nivel_atual, resetar_jogador=False)
+                else:
+                    if sala.porta_aberta and sala.jogador_na_porta(jogador):
+                        nivel_atual += 1
+                        sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa, inimigos = iniciar_sala(jogador, nivel_atual, resetar_jogador=False)
+
+                if jogador.sanidade <= 0:
+                    sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa, inimigos = iniciar_sala(jogador, nivel_atual, resetar_jogador=True)
+
+            if jogador.sanidade < 30:
+                offset_tremor_x = random.randint(-3, 3)
+                offset_tremor_y = random.randint(-3, 3)
+            else:
+                offset_tremor_x, offset_tremor_y = 0, 0
+
+        if estado == "MENU":
+            desenhar_fundo(tela, tempo, LARGURA, ALTURA)
+            for p in particulas: p.desenhar(tela)
+            desenhar_titulo(tela, tempo, LARGURA, fonte_titulo, fonte_subtitulo)
+            for botao in botoes: botao.desenhar(tela)
+
+            rodape = fonte_subtitulo.render("© 2026  Eco do Abismo", True, (40, 70, 100))
+            tela.blit(rodape, rodape.get_rect(center=(LARGURA // 2, ALTURA - 20)))
+
+        elif estado == "JOGANDO":
+            renderizar_jogo(
+                tela, jogador, sala, frascos, cameras, puzzle, puzzle.ativo,
+                nivel_atual, offset_tremor_x, offset_tremor_y, mensagem_flash_ativo,
+                LARGURA, ALTURA, fonte_subtitulo, caixa_ferramentas, caixas, duto_dados, puzzle_caixa, inimigos)
+
+        pygame.display.flip()
+        relogio.tick(60)
+
+    pygame.quit()
+    sys.exit()
+
+if __name__ == "__main__":
+    main()
