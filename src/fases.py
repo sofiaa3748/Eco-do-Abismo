@@ -108,10 +108,10 @@ def iniciar_sala(jogador, nivel, resetar_jogador=False):
     return fn(jogador, resetar_jogador=resetar_jogador)
 
 
-def renderizar_jogo(tela, jogador, sala, frascos, cameras, puzzle, puzzle_aberto, nivel_atual, offset_x, offset_y, flash_ativo, LARGURA, ALTURA, fonte_sub, caixa_ferramentas=None, caixas=None, duto_dados=None, puzzle_caixa=None, inimigos=None):
+def renderizar_jogo(tela, jogador, sala, frascos, cameras, puzzle, puzzle_aberto, nivel_atual, offset_x, offset_y, flash_ativo, LARGURA, ALTURA, fonte_sub, caixa_ferramentas=None, caixas=None, duto_dados=None, puzzle_caixa=None, inimigos=None, sprites_jogador=None):
 
-    inimigos = inimigos if not None else []
-    caixas = caixas if not None else []
+    inimigos = inimigos if inimigos is not None else []
+    caixas = caixas if caixas is not None else []
     superficie_fase = pygame.Surface((LARGURA, ALTURA))
     superficie_fase.fill(AZUL_ESCURO)
     cone_surf = pygame.Surface((LARGURA, ALTURA), pygame.SRCALPHA)
@@ -153,8 +153,11 @@ def renderizar_jogo(tela, jogador, sala, frascos, cameras, puzzle, puzzle_aberto
         
     superficie_fase.blit(cone_surf, (0, 0))
     
-    cor_player = (180, 220, 255) if getattr(jogador, 'agachado', False) else BRANCO
-    pygame.draw.rect(superficie_fase, cor_player, jogador.get_rect(), border_radius=4)
+    if sprites_jogador:
+        jogador.desenhar(superficie_fase, sprites_jogador)
+    else:
+        cor_player = (180, 220, 255) if getattr(jogador, 'agachado', False) else BRANCO
+        pygame.draw.rect(superficie_fase, cor_player, jogador.get_rect(), border_radius=4)
     
     tela.blit(superficie_fase, (offset_x, offset_y))
 

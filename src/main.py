@@ -6,10 +6,14 @@ from configuracoes import LARGURA, ALTURA
 from personagem import Jogador
 from menu import Particula, criar_botoes, desenhar_fundo, desenhar_titulo
 from fases import iniciar_sala, renderizar_jogo
+from sprites import carregar_sprites_operario
+
 def main():
     pygame.init()
     tela = pygame.display.set_mode((LARGURA, ALTURA))
     pygame.display.set_caption("Eco do Abismo")
+
+    sprites_jogador = carregar_sprites_operario()
 
     try:
         fonte_titulo = pygame.font.SysFont("consolas", 64, bold=True)
@@ -108,13 +112,14 @@ def main():
             if puzzle.ativo:
                 puzzle.atualizar(teclas)
                 if puzzle.resolvido: sala.porta_aberta = True
+                jogador.andando = False
             elif puzzle_caixa.ativo:
-                pass
+                jogador.andando = False
             else:
                 if jogador.agachado:
-                    jogador_rect_futuro = pygame.Rect(jogador.x, jogador.y, 32, 20)
+                    jogador_rect_futuro = pygame.Rect(jogador.x, jogador.y, 50, 30)
                 else:
-                    jogador_rect_futuro = pygame.Rect(jogador.x, jogador.y, 32, 32)
+                    jogador_rect_futuro = pygame.Rect(jogador.x, jogador.y, 50, 50)
 
                 vel = 2.0 if jogador.agachado else 4.0
                 dx, dy = 0, 0
@@ -122,6 +127,8 @@ def main():
                 if teclas[pygame.K_RIGHT] or teclas[pygame.K_d]: dx = vel
                 if teclas[pygame.K_UP] or teclas[pygame.K_w]: dy = -vel
                 if teclas[pygame.K_DOWN] or teclas[pygame.K_s]: dy = vel
+
+                jogador.atualizar_animacao(dx, dy, tempo)
 
                 if teclas[pygame.K_r] and caixas:
                     jogador_hitbox_exp = jogador_rect_futuro.inflate(15, 15)
@@ -159,8 +166,8 @@ def main():
                     jogador.y -= dy
                     jogador.andar_teclas(teclas, LARGURA, ALTURA, paredes=sala.paredes_colisao())
 
-                jogador.x = max(40, min(LARGURA - 75, jogador.x))
-                jogador.y = max(40, min(ALTURA - 75, jogador.y))
+                jogador.x = max(40, min(LARGURA - 95, jogador.x))
+                jogador.y = max(40, min(ALTURA - 95, jogador.y))
 
                 jogador.dano_sanidade(0.008)
 
@@ -180,14 +187,14 @@ def main():
                 if duto_dados:
                     if duto_dados["porta_saida_aberta"] and jogador.x > duto_dados["rect_saida"].x:
                         nivel_atual += 1
-                        sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa = iniciar_sala(jogador, nivel_atual, resetar_jogador=False)
+                        sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa, inimigos = iniciar_sala(jogador, nivel_atual, resetar_jogador=False)
                 else:
                     if sala.porta_aberta and sala.jogador_na_porta(jogador):
                         nivel_atual += 1
-                        sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa = iniciar_sala(jogador, nivel_atual, resetar_jogador=False)
+                        sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa, inimigos = iniciar_sala(jogador, nivel_atual, resetar_jogador=False)
 
                 if jogador.sanidade <= 0:
-                    sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa = iniciar_sala(jogador, nivel_atual, resetar_jogador=True)
+                    sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa, inimigos = iniciar_sala(jogador, nivel_atual, resetar_jogador=True)
 
             if jogador.sanidade < 30:
                 offset_tremor_x = random.randint(-3, 3)
@@ -197,7 +204,7 @@ def main():
 
         if estado == "MENU":
             desenhar_fundo(tela, tempo, LARGURA, ALTURA)
-            for p in particulas: p.desenhar(tela)
+            for p in particulas: p.atualizar(ALTURA)
             desenhar_titulo(tela, tempo, LARGURA, fonte_titulo, fonte_subtitulo)
             for botao in botoes: botao.desenhar(tela)
 
@@ -208,7 +215,8 @@ def main():
             renderizar_jogo(
                 tela, jogador, sala, frascos, cameras, puzzle, puzzle.ativo,
                 nivel_atual, offset_tremor_x, offset_tremor_y, mensagem_flash_ativo,
-                LARGURA, ALTURA, fonte_subtitulo, caixa_ferramentas, caixas, duto_dados, puzzle_caixa, inimigos)
+                LARGURA, ALTURA, fonte_subtitulo, caixa_ferramentas, caixas, duto_dados, puzzle_caixa, inimigos,
+                sprites_jogador=sprites_jogador)
 
         pygame.display.flip()
         relogio.tick(60)

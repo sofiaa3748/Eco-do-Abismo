@@ -26,21 +26,22 @@ class Personagem(ABC):
     def mover(self, direcao):
         raise NotImplementedError
 
-
-
 class Jogador(Personagem):
- 
     def __init__(self, x, y, nome):
         super().__init__(x, y, nome, dano=10)
         self.nome = 'Operário 724'
         self.agachado = False
         self.tem_pe_de_cabra = False
- 
+        self.direcao = 'frente'
+        self.andando = False
+        self.frame_index = 0
+        self.tamanho_base = 110
+
     def get_rect(self):
         if self.agachado:
-            return pygame.Rect(self.x, self.y + 12, 32, 20)
-        return pygame.Rect(self.x, self.y, 32, 32)
- 
+            return pygame.Rect(self.x, self.y + int(self.tamanho_base * 0.375), self.tamanho_base, int(self.tamanho_base * 0.625))
+        return pygame.Rect(self.x, self.y, self.tamanho_base, self.tamanho_base)
+
     def mover(self, direcao):
         vel = 2.0 if self.agachado else 4.0
         if direcao == 'esquerda':
@@ -51,10 +52,9 @@ class Jogador(Personagem):
             self.y -= vel
         elif direcao == 'baixo':
             self.y += vel
- 
+
     def andar_teclas(self, teclas, largura, altura, paredes):
-        vel = 2.0 if self.agachado else 4.0
- 
+        vel = 1.5 if self.agachado else 4.0
         dx, dy = 0, 0
         if teclas[pygame.K_LEFT] or teclas[pygame.K_a]:
             dx = -vel
@@ -70,21 +70,51 @@ class Jogador(Personagem):
             if self.get_rect().colliderect(p):
                 self.x -= dx
                 break
- 
+
         self.y += dy
         for p in paredes:
             if self.get_rect().colliderect(p):
                 self.y -= dy
                 break
 
-        self.x = max(0, min(self.x, largura - 32))
-        self.y = max(0, min(self.y, altura - 32))
+        self.x = max(0, min(self.x, largura - self.tamanho_base))
+        self.y = max(0, min(self.y, altura - self.tamanho_base))
 
     def dano_sanidade(self, valor):
         self.sanidade -= valor
         if self.sanidade < 0:
             self.sanidade = 0
- 
+
+    def atualizar_animacao(self, dx, dy, tempo_ms):
+        if dx != 0 or dy != 0:
+            self.andando = True
+            if abs(dx) >= abs(dy):
+                self.direcao = 'direita' if dx > 0 else 'esquerda'
+            else:
+                self.direcao = 'costas' if dy < 0 else 'frente'
+            self.frame_index = (tempo_ms // 150) % 2
+        else:
+            self.andando = False
+            self.frame_index = 0
+
+    def desenhar(self, tela, sprites, offset=(0, 0)):
+        grupo = sprites[self.direcao]
+        imagem = grupo['andando'][self.frame_index] if self.andando else grupo['parado']
+
+        # O problema estava aqui: ele esticava a imagem para self.tamanho_base (que era 64)
+        imagem = pygame.transform.scale(imagem, (self.tamanho_base, self.tamanho_base))
+
+        if self.agachado:
+            largura_img, altura_img = imagem.get_size()
+            imagem = pygame.transform.scale(imagem, (largura_img, int(altura_img * 0.65)))
+
+        rect_colisao = self.get_rect()
+        
+        pos_pes = (rect_colisao.centerx + offset[0], rect_colisao.bottom + offset[1] + 2)
+        
+        rect_imagem = imagem.get_rect(midbottom=pos_pes)
+        tela.blit(imagem, rect_imagem)
+
     def atacar(self, personagem):
         return super().atacar(personagem)
 
