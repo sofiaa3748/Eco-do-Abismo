@@ -101,7 +101,6 @@ class Jogador(Personagem):
         grupo = sprites[self.direcao]
         imagem = grupo['andando'][self.frame_index] if self.andando else grupo['parado']
 
-        # O problema estava aqui: ele esticava a imagem para self.tamanho_base (que era 64)
         imagem = pygame.transform.scale(imagem, (self.tamanho_base, self.tamanho_base))
 
         if self.agachado:
