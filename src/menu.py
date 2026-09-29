@@ -10,12 +10,12 @@ class Particula:
         self.vy = random.uniform(-0.3, -1.5)
         self.tamanho = random.randint(1, 4)
         self.brilho = random.randint(100, 255)
-        
+
     def atualizar(self, altura):
         self.y += self.vy
         if self.y < 0:
             self.y = altura
-            
+
     def desenhar(self, tela):
         brilho_extra = min(255, int(self.brilho) + 20)
         cor = (int(self.brilho), int(self.brilho), brilho_extra)
@@ -56,12 +56,12 @@ def desenhar_fundo(tela, tempo, largura, altura):
 
 def desenhar_titulo(tela, tempo, largura, fonte_titulo, fonte_sub):
     oscilacao = math.sin(tempo / 400) * 8
-    
+
     txt = fonte_titulo.render("ECO DO ABISMO", True, (220, 230, 255))
     sombra = fonte_titulo.render("ECO DO ABISMO", True, (50, 50, 80))
-    
+
     tela.blit(sombra, sombra.get_rect(center=(largura // 2 + 4, 150 + int(oscilacao) + 4)))
     tela.blit(txt, txt.get_rect(center=(largura // 2, 150 + int(oscilacao))))
-    
+
     sub = fonte_sub.render("Tome as pílulas e mantenha sua sanidade...", True, (130, 140, 160))
     tela.blit(sub, sub.get_rect(center=(largura // 2, 230 + int(oscilacao))))
