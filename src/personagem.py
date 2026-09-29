@@ -3,7 +3,6 @@ import math
 from abc import ABC, abstractmethod
 
 class Personagem(ABC):
-
     def __init__(self, x, y, nome, dano):
         self.x = x
         self.y = y
@@ -13,7 +12,6 @@ class Personagem(ABC):
 
     def atacar(self, personagem):
         personagem.tomar_dano(self.dano)
-
 
     def tomar_dano(self, quantidade):
         self.vida -= quantidade
@@ -108,65 +106,17 @@ class Jogador(Personagem):
             imagem = pygame.transform.scale(imagem, (largura_img, int(altura_img * 0.65)))
 
         rect_colisao = self.get_rect()
-        
+
         pos_pes = (rect_colisao.centerx + offset[0], rect_colisao.bottom + offset[1] + 2)
-        
+
         rect_imagem = imagem.get_rect(midbottom=pos_pes)
         tela.blit(imagem, rect_imagem)
 
     def atacar(self, personagem):
         return super().atacar(personagem)
 
-
-class Inimigo(Personagem):
- 
-    def __init__(self, x, y, nome, largura_tela, altura_tela):
-        super().__init__(x, y, nome, dano=10)
-        self.nome = 'Inimigos'
-        self.largura_tela = largura_tela
-        self.altura_tela = altura_tela
-        self.tamanho = 20
-        self.cor = (255, 255, 255)
-        self.vida = 120.0
-
-    @property
-    def rect(self):
-        return pygame.Rect(self.x, self.y, self.tamanho, self.tamanho)
-
-    def atacar(self, personagem):
-        return super().atacar(personagem)
- 
-    def fora_da_tela(self):
-        return self.rect.top > self.altura_tela
- 
-    def desenhar(self, superficie):
-        pygame.draw.rect(superficie, self.cor, self.rect)
- 
-    def mover(self, direcao, velocidade=2.0):
-        if direcao == 'esquerda':
-            self.x -= velocidade
-        elif direcao == 'direita':
-            self.x += velocidade
-        elif direcao == 'cima':
-            self.y -= velocidade
-        elif direcao == 'baixo':
-            self.y += velocidade
- 
-    def perseguir(self, jogador):
-        if self.x < jogador.x:
-            self.mover('direita')
-        elif self.x > jogador.x:
-            self.mover('esquerda')
-        elif self.y < jogador.y:
-            self.mover('baixo')
-        elif self.y > jogador.y:
-            self.mover('cima')
- 
-    def tomar_dano(self, quantidade):
-        return super().tomar_dano(quantidade)
-
 class CameraSeguranca(Personagem):
- 
+
     def __init__(self, x, y, angulo_inicial, alcance, abertura_graus, velocidade_giro, arco_max):
         super().__init__(x, y, nome='Câmera de segurança', dano=0)
         self.angulo_atual = angulo_inicial
@@ -185,36 +135,36 @@ class CameraSeguranca(Personagem):
             self.angulo_atual += self.vel * self.direcao_giro
             if abs(self.angulo_atual - self.angulo_base) > self.arco_max:
                 self.direcao_giro *= -1
- 
+
     def desenhar(self, surf_base, cone_surf, jogador):
         pygame.draw.circle(surf_base, (50, 50, 50), (self.x, self.y), 10)
         pygame.draw.circle(surf_base, (255, 50, 50), (self.x, self.y), 4)
- 
+
         pontos = [(self.x, self.y)]
         passos = 12
         ang_inicial = math.radians(self.angulo_atual - self.abertura / 2)
         ang_final = math.radians(self.angulo_atual + self.abertura / 2)
- 
+
         for i in range(passos + 1):
             ang = ang_inicial + (ang_final - ang_inicial) * (i / passos)
             px = self.x + math.cos(ang) * self.alcance
             py = self.y + math.sin(ang) * self.alcance
             pontos.append((px, py))
- 
+
         cor_cone = (255, 50, 50, 70) if self.detecta(jogador) else (255, 255, 100, 50)
         pygame.draw.polygon(cone_surf, cor_cone, pontos)
- 
+
     def detecta(self, jogador):
         rect = jogador.get_rect()
         centro_j = rect.center
         dist = math.hypot(centro_j[0] - self.x, centro_j[1] - self.y)
- 
+
         if dist > self.alcance:
             return False
- 
+
         ang_j = math.degrees(math.atan2(centro_j[1] - self.y, centro_j[0] - self.x))
         ang_diff = (ang_j - self.angulo_atual + 180) % 360 - 180
- 
+
         if abs(ang_diff) <= self.abertura / 2:
             return True
         return False

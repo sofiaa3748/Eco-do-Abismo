@@ -65,3 +65,51 @@ def desenhar_titulo(tela, tempo, largura, fonte_titulo, fonte_sub):
 
     sub = fonte_sub.render("Tome as pílulas e mantenha sua sanidade...", True, (130, 140, 160))
     tela.blit(sub, sub.get_rect(center=(largura // 2, 230 + int(oscilacao))))
+
+def desenhar_intro_acordar(tela, tempo_decorrido, largura, altura, fonte_sub, sprites_jogador=None,
+                            duracao_total=3400):
+
+    tela.fill((8, 8, 13))
+    pygame.draw.rect(tela, (24, 22, 30), (0, 0, largura, altura))
+
+    rect_cama = pygame.Rect(largura // 2 - 90, altura // 2 - 30, 180, 110)
+    pygame.draw.rect(tela, (55, 42, 38), rect_cama, border_radius=10)
+    pygame.draw.rect(tela, (85, 68, 58), rect_cama.inflate(-24, -24), border_radius=8)
+    pygame.draw.rect(tela, (35, 30, 45), (rect_cama.x - 10, rect_cama.y - 6, 20, rect_cama.height + 12), border_radius=6)
+
+    fase_texto_1 = duracao_total * 0.35
+    fase_abertura_fim = duracao_total
+
+    if sprites_jogador and tempo_decorrido >= fase_abertura_fim:
+        try:
+            sprite = sprites_jogador['frente']['parado']
+            tela.blit(sprite, sprite.get_rect(midbottom=(rect_cama.centerx, rect_cama.top + 12)))
+        except Exception:
+            pass
+
+    if tempo_decorrido < fase_texto_1:
+        alpha = min(255, int(255 * (tempo_decorrido / max(1, fase_texto_1))))
+        txt = fonte_sub.render('UMA VOZ: "Acorde..."', True, (205, 215, 235))
+        txt.set_alpha(alpha)
+        tela.blit(txt, txt.get_rect(center=(largura // 2, altura - 90)))
+        raio_atual = 0
+    elif tempo_decorrido < fase_abertura_fim:
+        progresso = (tempo_decorrido - fase_texto_1) / max(1, (fase_abertura_fim - fase_texto_1))
+        raio_atual = progresso * largura * 0.75
+        txt = fonte_sub.render('UMA VOZ: "Levante-se. Você precisa fugir daqui, agora."', True, (205, 215, 235))
+        tela.blit(txt, txt.get_rect(center=(largura // 2, altura - 90)))
+    else:
+        raio_atual = largura
+        txt = fonte_sub.render("Pressione [ESPAÇO] para levantar", True, (170, 180, 205))
+        tela.blit(txt, txt.get_rect(center=(largura // 2, altura - 55)))
+
+    if tempo_decorrido < fase_abertura_fim:
+        véu = pygame.Surface((largura, altura), pygame.SRCALPHA)
+        véu.fill((0, 0, 0, 255))
+        if raio_atual > 0:
+            largura_olho = raio_atual * 2
+            altura_olho = raio_atual
+            pygame.draw.ellipse(véu, (0, 0, 0, 0),
+                                 (largura // 2 - largura_olho / 2, altura // 2 - altura_olho / 2,
+                                  largura_olho, altura_olho))
+        tela.blit(véu, (0, 0))

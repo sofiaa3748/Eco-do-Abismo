@@ -4,8 +4,8 @@ import random
 
 from configuracoes import LARGURA, ALTURA, BRANCO
 from personagem import Jogador
-from menu import Particula, criar_botoes, desenhar_fundo, desenhar_titulo
-from fases import iniciar_sala, renderizar_jogo, DURACAO_ABERTURA_OLHOS
+from menu import Particula, criar_botoes, desenhar_fundo, desenhar_titulo, desenhar_intro_acordar
+from fases import iniciar_sala, renderizar_jogo
 from sprites import carregar_sprites_operario
 
 def main():
@@ -43,6 +43,9 @@ def main():
     mensagem_flash_ativo = False
     tempo_flash = 0
 
+    DURACAO_INTRO = 3400  
+    tempo_intro_inicio = 0
+
     while rodando:
         tempo = pygame.time.get_ticks()
         mouse = pygame.mouse.get_pos()
@@ -60,7 +63,8 @@ def main():
                 for botao in botoes:
                     if botao.clicado(evento):
                         if "JOGAR" in botao.texto:
-                            estado = "JOGANDO"
+                            estado = "INTRO"
+                            tempo_intro_inicio = tempo
                             nivel_atual = 1
                             jogador = Jogador(100, 300, "Operário 724")
                             jogador.agachado = False
@@ -69,16 +73,13 @@ def main():
                         elif "SAIR" in botao.texto:
                             rodando = False
 
+            elif estado == "INTRO":
+                if evento.type == pygame.KEYDOWN and evento.key == pygame.K_SPACE:
+                    if tempo - tempo_intro_inicio >= DURACAO_INTRO:
+                        estado = "JOGANDO"
+
             elif estado == "JOGANDO":
-                acordando = contexto.get("acordando", False)
-
                 if evento.type == pygame.KEYDOWN:
-                    if acordando:
-                        if evento.key == pygame.K_SPACE and tempo - contexto["tempo_inicio"] >= DURACAO_ABERTURA_OLHOS:
-                            contexto["acordando"] = False
-                            contexto["tempo_inicio"] = tempo 
-                        continue
-
                     if evento.key == pygame.K_ESCAPE:
                         if modal_ativo:
                             puzzle_modal.ativo = False
@@ -114,7 +115,7 @@ def main():
                 botao.atualizar(mouse)
 
         elif estado == "JOGANDO":
-            if modal_ativo or contexto.get("acordando"):
+            if modal_ativo:
                 jogador.andando = False
             else:
                 if jogador.agachado:
@@ -172,14 +173,8 @@ def main():
                     jogador.y -= dy
                     jogador.andar_teclas(teclas, sala.largura, sala.altura, paredes=sala.paredes_colisao())
 
-                limite_x = sala.largura - sala.espessura_parede - 70
-                limite_y = sala.altura - sala.espessura_parede - 70
-                if duto and jogador.agachado and duto["corredor"].contains(p_rect):
-                    # dentro do duto, agachado, pode atravessar a parede até o outro lado
-                    limite_x = sala.largura - 20
-                    limite_y = sala.altura - 20
-                jogador.x = max(sala.espessura_parede, min(limite_x, jogador.x))
-                jogador.y = max(sala.espessura_parede, min(limite_y, jogador.y))
+                jogador.x = max(sala.espessura_parede, min(sala.largura - sala.espessura_parede - 70, jogador.x))
+                jogador.y = max(sala.espessura_parede, min(sala.altura - sala.espessura_parede - 70, jogador.y))
 
                 jogador.dano_sanidade(contexto.get("taxa_dano_sanidade", 0.008))
 
@@ -226,6 +221,11 @@ def main():
             rodape = fonte_subtitulo.render("(c) 2026  Eco do Abismo", True, (40, 70, 100))
             tela.blit(rodape, rodape.get_rect(center=(LARGURA // 2, ALTURA - 20)))
 
+        elif estado == "INTRO":
+            desenhar_intro_acordar(tela, tempo - tempo_intro_inicio, LARGURA, ALTURA,
+                                    fonte_subtitulo, sprites_jogador=sprites_jogador,
+                                    duracao_total=DURACAO_INTRO)
+
         elif estado == "JOGANDO":
             renderizar_jogo(
                 tela, jogador, contexto, offset_tremor_x, offset_tremor_y, mensagem_flash_ativo,
@@ -247,7 +247,6 @@ def main():
 
     pygame.quit()
     sys.exit()
-
 
 if __name__ == "__main__":
     main()

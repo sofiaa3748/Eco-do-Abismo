@@ -1,196 +1,396 @@
 import pygame
 import random
+import math
+
 from configuracoes import LARGURA, ALTURA, AZUL_ESCURO, BRANCO, CINZA_BORDA
 from nivel import Sala
-from personagem import CameraSeguranca, Inimigo
-from itens import gerar_frascos_na_sala
-from interface_usuario import desenhar_hud, desenhar_mensagem_contextual, desenhar_flash_detectado
-from puzzle import CaixaArrastavel, PuzzleCaixaFerramentas, PuzzleRadio
+from itens import gerar_frascos_na_sala, Dica, Documento, Chave
+from interface_usuario import (desenhar_hud, desenhar_mensagem_contextual, desenhar_flash_detectado,
+                                desenhar_barra_oxigenio, desenhar_overlay_gas,
+                                desenhar_escuridao_com_lanterna)
+from puzzle import CaixaArrastavel, PuzzleCaixaFerramentas, PuzzlePainelSenha, PuzzleCofre
 
+def _transicao_padrao(contexto, jogador):
+    sala = contexto["sala"]
+    return sala.porta_aberta and sala.jogador_na_porta(jogador)
+
+
+def _estado_base(sala, nivel, **kwargs):
+    contexto = {
+        "sala": sala,
+        "nivel": nivel,
+        "frascos": [],
+        "cameras": [],
+        "guardas": [],
+        "vultos": [],
+        "caixas": [],
+        "objetos": [],
+        "duto": None,
+        "puzzle_modal": None,
+        "taxa_dano_sanidade": 0.008,
+        "mensagem_intro": None,
+        "duracao_intro": 4500,
+        "tempo_inicio": pygame.time.get_ticks(),
+        "final": False,
+        "mensagem_final": "Fim da demonstração.",
+        "usa_oxigenio": False,
+        "usa_lanterna": False,
+        "tint_gas": False,
+        "mensagem_temporaria": None,
+        "mensagem_temporaria_expira": 0,
+        "ao_interagir": None,
+        "ao_atualizar": None,
+        "ao_desenhar_extra": None,
+        "ao_tecla_down": None,
+        "texto_status": None,
+        "condicao_transicao": _transicao_padrao,
+    }
+    contexto.update(kwargs)
+    return contexto
+
+
+def _definir_mensagem(contexto, texto, tempo_ms, duracao_ms=3000):
+    contexto["mensagem_temporaria"] = texto
+    contexto["mensagem_temporaria_expira"] = tempo_ms + duracao_ms
+
+
+def _perto(jogador, pos, raio):
+    centro = jogador.get_rect().center
+    return math.hypot(centro[0] - pos[0], centro[1] - pos[1]) <= raio
 
 def nivel_1(jogador, resetar_jogador=False):
     jogador.sanidade = 100
     jogador.tem_pe_de_cabra = False
     jogador.agachado = False
 
-    sala = Sala(LARGURA, ALTURA, ponto_entrada=(60, ALTURA // 2 - 16))
+    sala = Sala(1400, 900, ponto_entrada=(90, 430), largura_tela=LARGURA, altura_tela=ALTURA)
     jogador.x, jogador.y = sala.ponto_entrada
 
-    cameras = [
-        CameraSeguranca(x=LARGURA - 40, y=40, angulo_inicial=135,
-                         alcance=260, abertura_graus=50,
-                         velocidade_giro=0.5, arco_max=35)
-    ]
-    caixas = []
-    caixa_ferramentas = None
-    duto_dados = None
-
     frascos = gerar_frascos_na_sala(1)
-    puzzle = PuzzleRadio(LARGURA, ALTURA)
-    puzzle_caixa = PuzzleCaixaFerramentas(LARGURA, ALTURA)
 
-    inimigos = []
-    return sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa, inimigos
+    senha = ['7', '3', '9', '1']
+    posicoes = [(340, 160), (1120, 220), (1180, 740), (420, 780)]
+    dicas = [Dica(x, y, senha[i], i) for i, (x, y) in enumerate(posicoes)]
+    puzzle_senha = PuzzlePainelSenha(senha)
+
+    contexto = _estado_base(
+        sala, 1,
+        frascos=frascos,
+        objetos=dicas,
+        taxa_dano_sanidade=0.004,
+        mensagem_intro="Sua sanidade cai com o tempo. Tome as pílulas espalhadas pela sala "
+                        "para recuperá-la — aqui ela ainda cai bem devagar.",
+    )
+    contexto["puzzle_senha"] = puzzle_senha
+
+    def ao_interagir(contexto, jogador):
+        for dica in contexto["objetos"]:
+            if not dica.coletada and jogador.get_rect().colliderect(dica.rect.inflate(16, 16)):
+                dica.coletada = True
+                contexto["puzzle_senha"].registrar_pista(dica.indice, dica.valor)
+
+        sala = contexto["sala"]
+        if not sala.porta_aberta and sala.jogador_na_porta(jogador):
+            if contexto["puzzle_senha"].tentar_abrir():
+                sala.porta_aberta = True
+
+    def texto_status(contexto):
+        return f'SENHA DA PORTA: {contexto["puzzle_senha"].texto_progresso()}'
+
+    contexto["ao_interagir"] = ao_interagir
+    contexto["texto_status"] = texto_status
+    return contexto
 
 
 def nivel_2(jogador, resetar_jogador=False):
     if resetar_jogador:
         jogador.sanidade = 100
         jogador.tem_pe_de_cabra = False
-        jogador.agachado = False
+    jogador.agachado = False
 
-    sala = Sala(LARGURA, ALTURA, ponto_entrada=(60, ALTURA // 2 - 16))
+    sala = Sala(1300, 850, ponto_entrada=(90, 405), largura_tela=LARGURA, altura_tela=ALTURA)
     jogador.x, jogador.y = sala.ponto_entrada
     sala.porta_aberta = False
 
-    cameras = [
-        CameraSeguranca(x=430, y=40, angulo_inicial=90, alcance=500,
-                         abertura_graus=32, velocidade_giro=0.0, arco_max=0)
-    ]
-
     caixas = [
-        CaixaArrastavel(70, ALTURA - 90),
-        CaixaArrastavel(70, ALTURA - 145),
+        CaixaArrastavel(1080, 560),
+        CaixaArrastavel(1080, 615),
     ]
-    caixa_ferramentas = pygame.Rect(75, ALTURA - 85, 30, 20)
+    rect_placa = pygame.Rect(1075, 545, 90, 90)
+    cofre = PuzzleCofre(rect_placa, palavra_chave="ABISMO")
 
-    duto_dados = {
-        "corredor": pygame.Rect(280, 45, 260, 45),
-        "porta_entrada_aberta": False,
-        "porta_saida_aberta": False,
-        "rect_entrada": pygame.Rect(280, 45, 15, 45),
-        "rect_saida": pygame.Rect(525, 45, 15, 45),
-    }
+    bilhete = Documento(300, 700, 'Um bilhete rasgado: "...a senha do cofre é ABISMO."')
+    chave = Chave(1100, 590, rotulo="Chave da Porta")
 
-    frascos = gerar_frascos_na_sala(2)
-    puzzle = PuzzleRadio(LARGURA, ALTURA)
-    puzzle_caixa = PuzzleCaixaFerramentas(LARGURA, ALTURA)
-    inimigos = []
-    return sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa, inimigos
+    contexto = _estado_base(
+        sala, 2,
+        caixas=caixas,
+        objetos=[bilhete],
+        mensagem_intro='A VOZ: "A saída está trancada. Procure a chave nesta sala."',
+    )
+    contexto["cofre"] = cofre
+    contexto["chave"] = chave
+    contexto["sabe_palavra_chave"] = False
+    contexto["tem_chave"] = False
+
+    def ao_interagir(contexto, jogador):
+        if not bilhete.coletado and jogador.get_rect().colliderect(bilhete.rect.inflate(16, 16)):
+            bilhete.coletado = True
+            contexto["sabe_palavra_chave"] = True
+            _definir_mensagem(contexto, bilhete.texto, pygame.time.get_ticks(), 4000)
+
+        cofre = contexto["cofre"]
+        cofre.checar_revelado(contexto["caixas"])
+        if cofre.revelado and not cofre.aberto and jogador.get_rect().colliderect(cofre.rect_placa.inflate(20, 20)):
+            if cofre.tentar_abrir(contexto["sabe_palavra_chave"]):
+                contexto["tem_chave"] = True
+                chave.coletada = True
+            elif not contexto["sabe_palavra_chave"]:
+                _definir_mensagem(contexto, "O cofre pede uma palavra-chave que você ainda não sabe.", pygame.time.get_ticks())
+
+        sala = contexto["sala"]
+        if contexto["tem_chave"] and not sala.porta_aberta and sala.jogador_na_porta(jogador):
+            sala.porta_aberta = True
+
+    def ao_desenhar_extra(contexto, surf, jogador, fonte, tempo_ms):
+        contexto["cofre"].checar_revelado(contexto["caixas"])
+        contexto["cofre"].desenhar(surf, fonte)
+        if not contexto["chave"].coletada:
+            contexto["chave"].desenhar(surf)
+
+    def texto_status(contexto):
+        if contexto["tem_chave"]:
+            return "VOCÊ TEM: Chave da Porta"
+        return None
+
+    contexto["ao_interagir"] = ao_interagir
+    contexto["ao_desenhar_extra"] = ao_desenhar_extra
+    contexto["texto_status"] = texto_status
+    return contexto
 
 
 def nivel_3(jogador, resetar_jogador=False):
     if resetar_jogador:
         jogador.sanidade = 100
         jogador.tem_pe_de_cabra = False
-        jogador.agachado = False
+    jogador.agachado = False
 
-    sala = Sala(LARGURA, ALTURA, ponto_entrada=(60, ALTURA // 2 - 16))
+    sala = Sala(1300, 850, ponto_entrada=(90, 405), largura_tela=LARGURA, altura_tela=ALTURA)
     jogador.x, jogador.y = sala.ponto_entrada
+    sala.porta_aberta = False
 
-    cameras = [
-        CameraSeguranca(x=40, y=40, angulo_inicial=45, alcance=220,
-                         abertura_graus=50, velocidade_giro=1.3, arco_max=40),
-        CameraSeguranca(x=LARGURA - 40, y=40, angulo_inicial=135, alcance=220,
-                         abertura_graus=50, velocidade_giro=1.3, arco_max=40),
+    documentos = [
+        Documento(300, 220, 'Relatório: "Paciente 724 segue instável. Monitorar a Voz."'),
+        Documento(950, 260, 'Ficha rasgada: "...não é a primeira vez que ele foge."'),
+        Documento(650, 700, 'Anotação: "Se ele perguntar quem fala com ele, não responda."'),
+        Documento(1150, 650, "Um mapa antigo da instalação, com a saída marcada.", especial=True),
     ]
 
-    inimigos = [Inimigo(x=400, y=300, nome='inimigo_1', largura_tela=LARGURA, altura_tela=ALTURA)]
+    contexto = _estado_base(
+        sala, 3,
+        objetos=documentos,
+        mensagem_intro='A VOZ: "Continue procurando. A saída está em algum lugar aqui."',
+    )
+    contexto["tem_mapa"] = False
 
-    caixas = []
-    caixa_ferramentas = None
-    duto_dados = None
+    def ao_interagir(contexto, jogador):
+        for doc in contexto["objetos"]:
+            if not doc.coletado and jogador.get_rect().colliderect(doc.rect.inflate(16, 16)):
+                doc.coletado = True
+                _definir_mensagem(contexto, doc.texto, pygame.time.get_ticks(), 4000)
+                if doc.especial:
+                    contexto["tem_mapa"] = True
+                    contexto["sala"].porta_aberta = True
 
-    frascos = gerar_frascos_na_sala(3)
-    puzzle = PuzzleRadio(LARGURA, ALTURA)
+    def texto_status(contexto):
+        if contexto["tem_mapa"]:
+            return "VOCÊ TEM: Mapa da instalação (a saída foi liberada)"
+        lidos = sum(1 for d in contexto["objetos"] if d.coletado)
+        return f"Documentos lidos: {lidos}/{len(contexto['objetos'])}"
+
+    contexto["ao_interagir"] = ao_interagir
+    contexto["texto_status"] = texto_status
+    return contexto
+
+def nivel_4(jogador, resetar_jogador=False):
+    if resetar_jogador:
+        jogador.sanidade = 100
+        jogador.tem_pe_de_cabra = False
+    jogador.agachado = False
+
+    sala = Sala(1500, 950, ponto_entrada=(90, 470), largura_tela=LARGURA, altura_tela=ALTURA)
+    jogador.x, jogador.y = sala.ponto_entrada
+    sala.porta_aberta = True  
+
+    caixas = [
+        CaixaArrastavel(760, 700),
+        CaixaArrastavel(760, 755),
+    ]
+    caixa_ferramentas = pygame.Rect(770, 640, 30, 20)
     puzzle_caixa = PuzzleCaixaFerramentas(LARGURA, ALTURA)
 
-    return sala, frascos, cameras, puzzle, caixa_ferramentas, caixas, duto_dados, puzzle_caixa, inimigos
+    duto = {
+        "corredor": pygame.Rect(1050, 90, 380, 60),
+        "porta_entrada_aberta": False,
+        "porta_saida_aberta": False,
+        "rect_entrada": pygame.Rect(1050, 90, 15, 60),
+        "rect_saida": pygame.Rect(1415, 90, 15, 60),
+    }
+
+    contexto = _estado_base(
+        sala, 4,
+        caixas=caixas,
+        duto=duto,
+        mensagem_intro='A VOZ: "Depressa! Siga o corredor"',
+    )
+    contexto["puzzle_modal"] = puzzle_caixa
+    contexto["caixa_ferramentas"] = caixa_ferramentas
+    contexto["saiu_do_duto"] = False
+
+    def ao_interagir(contexto, jogador):
+        rect_p = jogador.get_rect()
+        duto = contexto["duto"]
+        pf = contexto["puzzle_modal"]
+
+        if rect_p.colliderect(duto["rect_entrada"].inflate(25, 25)):
+            if jogador.tem_pe_de_cabra and not duto["porta_entrada_aberta"]:
+                duto["porta_entrada_aberta"] = True
+        elif rect_p.colliderect(duto["rect_saida"].inflate(25, 25)):
+            if jogador.tem_pe_de_cabra and not duto["porta_saida_aberta"]:
+                duto["porta_saida_aberta"] = True
+        elif rect_p.colliderect(contexto["caixa_ferramentas"].inflate(15, 15)) and not jogador.tem_pe_de_cabra:
+            coberta = any(c.rect.colliderect(contexto["caixa_ferramentas"]) for c in contexto["caixas"])
+            if not coberta and not pf.ativo and not pf.resolvido:
+                pf.ativo = True
+
+    def ao_atualizar(contexto, jogador, teclas, tempo_ms):
+        duto = contexto["duto"]
+
+        dentro_do_duto = duto["corredor"].contains(jogador.get_rect())
+
+        if contexto["puzzle_modal"].resolvido and not jogador.tem_pe_de_cabra:
+            jogador.tem_pe_de_cabra = True
+
+        if (not contexto["saiu_do_duto"] and duto["porta_saida_aberta"]
+                and jogador.x > duto["rect_saida"].x):
+            contexto["saiu_do_duto"] = True
+            contexto["final"] = True
+
+    contexto["ao_interagir"] = ao_interagir
+    contexto["ao_atualizar"] = ao_atualizar
+    return contexto
+
 
 NIVEIS = {
-    1: nivel_1,
-    2: nivel_2,
-    3: nivel_3,
+    1: nivel_1, 2: nivel_2, 3: nivel_3, 4: nivel_4,
 }
 
+
 def iniciar_sala(jogador, nivel, resetar_jogador=False):
-    fn = NIVEIS.get(nivel, nivel_2)
-    return fn(jogador, resetar_jogador=resetar_jogador)
+    fn = NIVEIS.get(nivel, nivel_1)
+    contexto = fn(jogador, resetar_jogador=resetar_jogador)
+    contexto["tempo_inicio"] = pygame.time.get_ticks()
+    return contexto
 
 
-def renderizar_jogo(tela, jogador, sala, frascos, cameras, puzzle, puzzle_aberto, nivel_atual, offset_x, offset_y, flash_ativo, LARGURA, ALTURA, fonte_sub, caixa_ferramentas=None, caixas=None, duto_dados=None, puzzle_caixa=None, inimigos=None, sprites_jogador=None):
+def renderizar_jogo(tela, jogador, contexto, offset_x, offset_y, flash_ativo,
+                     fonte_sub, sprites_jogador=None):
+    sala = contexto["sala"]
+    tempo_ms = pygame.time.get_ticks()
 
-    inimigos = inimigos if inimigos is not None else []
-    caixas = caixas if caixas is not None else []
-    superficie_fase = pygame.Surface((LARGURA, ALTURA))
-    superficie_fase.fill(AZUL_ESCURO)
-    cone_surf = pygame.Surface((LARGURA, ALTURA), pygame.SRCALPHA)
+    superficie_mundo = pygame.Surface((sala.largura, sala.altura))
+    superficie_mundo.fill(AZUL_ESCURO)
+    cone_surf = pygame.Surface((sala.largura, sala.altura), pygame.SRCALPHA)
 
-    if nivel_atual == 2:
-        sala.porta_aberta = False
-        
-    sala.desenhar(superficie_fase)
-    
-    for f in frascos:
-        f.desenhar(superficie_fase)
+    sala.desenhar(superficie_mundo)
 
-    if nivel_atual == 2 and duto_dados:
-        pygame.draw.rect(superficie_fase, (50, 50, 55), duto_dados["corredor"])
-        pygame.draw.rect(superficie_fase, (80, 80, 85), duto_dados["corredor"], width=2)
-        
-        if not duto_dados["porta_entrada_aberta"]:
-            pygame.draw.rect(superficie_fase, (140, 140, 150), duto_dados["rect_entrada"])
-        if not duto_dados["porta_saida_aberta"]:
-            pygame.draw.rect(superficie_fase, (140, 140, 150), duto_dados["rect_saida"])
+    for f in contexto["frascos"]:
+        f.desenhar(superficie_mundo)
 
-    if nivel_atual == 2 and caixa_ferramentas:
-        caixa_coberta = False
-        for cx in caixas:
-            if cx.rect.colliderect(caixa_ferramentas):
-                caixa_coberta = True
-        if not caixa_coberta:
-            pygame.draw.rect(superficie_fase, (150, 35, 35), caixa_ferramentas, border_radius=3)
-            pygame.draw.rect(superficie_fase, (220, 200, 50), (caixa_ferramentas.x+10, caixa_ferramentas.y, 10, 4))
+    for obj in contexto["objetos"]:
+        obj.desenhar(superficie_mundo)
 
-    for cx in caixas:
-        cx.desenhar(superficie_fase)
+    duto = contexto["duto"]
+    if duto:
+        pygame.draw.rect(superficie_mundo, (50, 50, 55), duto["corredor"])
+        pygame.draw.rect(superficie_mundo, (80, 80, 85), duto["corredor"], width=2)
+        if not duto["porta_entrada_aberta"]:
+            pygame.draw.rect(superficie_mundo, (140, 140, 150), duto["rect_entrada"])
+        if not duto["porta_saida_aberta"]:
+            pygame.draw.rect(superficie_mundo, (140, 140, 150), duto["rect_saida"])
 
-    for inimigo in inimigos:
-        inimigo.desenhar(superficie_fase)
+    caixa_ferramentas = contexto.get("caixa_ferramentas")
+    if caixa_ferramentas:
+        coberta = any(c.rect.colliderect(caixa_ferramentas) for c in contexto["caixas"])
+        if not coberta:
+            pygame.draw.rect(superficie_mundo, (150, 35, 35), caixa_ferramentas, border_radius=3)
+            pygame.draw.rect(superficie_mundo, (220, 200, 50), (caixa_ferramentas.x + 10, caixa_ferramentas.y, 10, 4))
 
-    for camera in cameras:
-        camera.desenhar(superficie_fase, cone_surf, jogador)
-        
-    superficie_fase.blit(cone_surf, (0, 0))
-    
+    for cx in contexto["caixas"]:
+        cx.desenhar(superficie_mundo)
+
+    if contexto.get("ao_desenhar_extra"):
+        contexto["ao_desenhar_extra"](contexto, superficie_mundo, jogador, fonte_sub, tempo_ms)
+
+    for camera in contexto["cameras"]:
+        camera.atualizar()
+        camera.desenhar(superficie_mundo, cone_surf, jogador)
+
+    for guarda in contexto["guardas"]:
+        guarda.desenhar(superficie_mundo, cone_surf, jogador)
+
+    isca = contexto.get("isca")
+    if isca and not isca["usada"]:
+        pygame.draw.circle(superficie_mundo, (200, 180, 90), isca["rect"].center, 9)
+
+    superficie_mundo.blit(cone_surf, (0, 0))
+
     if sprites_jogador:
-        jogador.desenhar(superficie_fase, sprites_jogador)
+        jogador.desenhar(superficie_mundo, sprites_jogador)
     else:
         cor_player = (180, 220, 255) if getattr(jogador, 'agachado', False) else BRANCO
-        pygame.draw.rect(superficie_fase, cor_player, jogador.get_rect(), border_radius=4)
-    
-    tela.blit(superficie_fase, (offset_x, offset_y))
+        pygame.draw.rect(superficie_mundo, cor_player, jogador.get_rect(), border_radius=4)
+
+    cam_x, cam_y = sala.calcular_camera(jogador)
+    area_visivel = pygame.Rect(cam_x, cam_y, sala.largura_tela, sala.altura_tela)
+    tela.blit(superficie_mundo, (offset_x, offset_y), area=area_visivel)
 
     desenhar_hud(tela, jogador, fonte_sub)
-    texto_nivel = fonte_sub.render(f"SALA {nivel_atual}", True, CINZA_BORDA)
+
+    y_status = 100
+    if contexto.get("usa_oxigenio"):
+        desenhar_barra_oxigenio(tela, jogador, fonte_sub)
+        y_status = 175
+
+    texto_status_fn = contexto.get("texto_status")
+    if texto_status_fn:
+        linha = texto_status_fn(contexto)
+        if linha:
+            txt = fonte_sub.render(linha, True, (210, 220, 255))
+            tela.blit(txt, (20, y_status))
+
+    texto_nivel = fonte_sub.render(f"SALA {contexto['nivel']}", True, CINZA_BORDA)
     tela.blit(texto_nivel, (LARGURA - texto_nivel.get_width() - 20, 20))
 
-    if nivel_atual == 2 and duto_dados:
-        rect_player = jogador.get_rect()
-        
-        if rect_player.colliderect(duto_dados["rect_entrada"].inflate(20, 20)):
-            if not duto_dados["porta_entrada_aberta"]:
-                desenhar_mensagem_contextual(tela, "Pressione E com o Pé de Cabra para arrancar a grade", LARGURA, ALTURA, fonte_sub)
-            elif not getattr(jogador, 'agachado', False):
-                desenhar_mensagem_contextual(tela, "O duto é muito estreito. Pressione Q para agachar", LARGURA, ALTURA, fonte_sub)
-        
-        elif rect_player.colliderect(duto_dados["rect_saida"].inflate(20, 20)) and not duto_dados["porta_saida_aberta"]:
-            desenhar_mensagem_contextual(tela, "Grade de saída trancada! Pressione E para quebrar", LARGURA, ALTURA, fonte_sub)
+    if contexto.get("tint_gas"):
+        desenhar_overlay_gas(tela, LARGURA, ALTURA, intensidade=70)
 
-        if caixa_ferramentas and rect_player.colliderect(caixa_ferramentas.inflate(15, 15)) and not getattr(jogador, 'tem_pe_de_cabra', False):
-            caixa_coberta = False
-            for cx in caixas:
-                if cx.rect.colliderect(caixa_ferramentas): caixa_coberta = True
-            if not caixa_coberta:
-                desenhar_mensagem_contextual(tela, "Pressione E para revirar a Caixa de Ferramentas", LARGURA, ALTURA, fonte_sub)
+    if contexto.get("usa_lanterna"):
+        pos_tela = (jogador.get_rect().centerx - cam_x + offset_x, jogador.get_rect().centery - cam_y + offset_y)
+        desenhar_escuridao_com_lanterna(tela, pos_tela, LARGURA, ALTURA,
+                                         ligada=getattr(jogador, "lanterna_ligada", False))
 
-        for cx in caixas:
-            if rect_player.inflate(15, 15).colliderect(cx.rect):
-                desenhar_mensagem_contextual(tela, "Segure [R] + Direcionais para mover a caixa de madeira", LARGURA, ALTURA, fonte_sub, y=ALTURA - 90)
+    intro = contexto.get("mensagem_intro")
+    if intro and tempo_ms - contexto["tempo_inicio"] < contexto.get("duracao_intro", 4500):
+        desenhar_mensagem_contextual(tela, intro, LARGURA, ALTURA, fonte_sub, y=ALTURA - 70)
 
-    if puzzle_aberto:
-        puzzle.desenhar(tela, fonte_sub)
-    if puzzle_caixa and puzzle_caixa.ativo:
-        puzzle_caixa.desenhar(tela, fonte_sub)
+    msg = contexto.get("mensagem_temporaria")
+    if msg and tempo_ms < contexto.get("mensagem_temporaria_expira", 0):
+        desenhar_mensagem_contextual(tela, msg, LARGURA, ALTURA, fonte_sub, y=ALTURA - 40)
+
+    puzzle_modal = contexto.get("puzzle_modal")
+    if puzzle_modal and getattr(puzzle_modal, "ativo", False):
+        puzzle_modal.desenhar(tela, fonte_sub)
+
     if flash_ativo:
         desenhar_flash_detectado(tela, LARGURA, ALTURA)
