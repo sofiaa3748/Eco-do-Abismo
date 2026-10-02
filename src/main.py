@@ -5,7 +5,7 @@ import random
 from configuracoes import LARGURA, ALTURA, BRANCO
 from personagem import Jogador
 from menu import Particula, criar_botoes, desenhar_fundo, desenhar_titulo, desenhar_intro_acordar
-from fases import iniciar_sala, renderizar_jogo
+from fases import iniciar_sala, renderizar_jogo, NIVEIS
 from sprites import carregar_sprites_operario
 
 def main():
@@ -196,7 +196,11 @@ def main():
                     contexto["ao_atualizar"](contexto, jogador, teclas, tempo)
 
                 if contexto.get("final"):
-                    estado = "FINAL"
+                    if nivel_atual + 1 in NIVEIS:
+                        nivel_atual += 1
+                        contexto = iniciar_sala(jogador, nivel_atual, resetar_jogador=False)
+                    else:
+                        estado = "FINAL"
                 elif contexto["condicao_transicao"](contexto, jogador):
                     nivel_atual += 1
                     contexto = iniciar_sala(jogador, nivel_atual, resetar_jogador=False)
