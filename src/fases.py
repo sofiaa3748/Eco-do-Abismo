@@ -544,7 +544,7 @@ def nivel_6(jogador, resetar_jogador=False):
 
 
 NIVEIS = {
-    1: nivel_1, 2: nivel_2, 3: nivel_3, 4: nivel_4, 5: nivel_5, 6: nivel_6,
+    1: nivel_1, 2: nivel_2, 3: nivel_3, 4: nivel_4, 5: nivel_5, 6: nivel_6, 9: nivel_9, 10: nivel_10, 11: nivel_11, 12: nivel_12
 }
 
 
@@ -656,3 +656,706 @@ def renderizar_jogo(tela, jogador, contexto, offset_x, offset_y, flash_ativo,
 
     if flash_ativo:
         desenhar_flash_detectado(tela, LARGURA, ALTURA)
+
+def nivel_9(jogador, reset=True):
+    if reset:
+        jogador.sanidade = 100
+        jogador.agachado = False
+
+    sala = Sala(
+        1500,
+        900,
+        (100, 430),
+        largura_tela=LARGURA,
+        altura_tela=ALTURA
+    )
+
+    posicoes_disjuntores = [
+        (300, 200),
+        (650, 200),
+        (1000, 200),
+        (1250, 500)
+    ]
+
+    puzzle_disjuntores = PuzzleDisjuntores(
+        posicoes_disjuntores,
+        [2, 0, 3, 1]
+    )
+
+    lanterna = {
+        "pos": (180, 500),
+        "coletada": False,
+        "bateria": 100.0
+    }
+
+    vultos = [
+        Inimigo(800, 300, velocidade=1.8, dano=4,
+                recarga_ms=1200, atraso_ms=0, lado_desvio=1),
+
+        Inimigo(1100, 650, velocidade=2.0, dano=4,
+                recarga_ms=1200, atraso_ms=500, lado_desvio=-1),
+
+        Inimigo(500, 700, velocidade=1.7, dano=3,
+                recarga_ms=1300, atraso_ms=1000, lado_desvio=1)
+    ]
+
+    contexto = _estado_base(
+        sala,
+        9,
+        objetos=[],
+        puzzle_disjuntores=puzzle_disjuntores,
+        lanterna=lanterna,
+        vultos=vultos,
+        usa_lanterna=True,
+        mensagem_intro=(
+            'A VOZ: "O elevador parou... '
+            'Encontre os disjuntores."'
+        ),
+        duracao_intro=4000,
+        taxa_dano_sanidade=0.004,
+        texto_status="Reative a energia ligando os disjuntores."
+    )
+
+    def interagir(jogador, tempo_ms):
+        if not lanterna["coletada"]:
+            if _perto(jogador, lanterna["pos"], 60):
+                lanterna["coletada"] = True
+                _definir_mensagem(
+                    contexto,
+                    "Você encontrou uma lanterna. A bateria está acabando.",
+                    tempo_ms
+                )
+                return
+
+        disjuntor = puzzle_disjuntores.disjuntor_proximo(jogador)
+
+        if disjuntor:
+            sucesso = puzzle_disjuntores.acionar(disjuntor)
+
+            if sucesso:
+                if puzzle_disjuntores.resolvido:
+                    sala.porta_aberta = True
+
+                    _definir_mensagem(
+                        contexto,
+                        "Todos os disjuntores foram ativados! A energia voltou.",
+                        tempo_ms,
+                        4000
+                    )
+
+                    for vulto in vultos:
+                        vulto.surgir(tempo_ms)
+
+                else:
+                    _definir_mensagem(
+                        contexto,
+                        "Disjuntor ativado.",
+                        tempo_ms,
+                        1200
+                    )
+
+            else:
+                _definir_mensagem(
+                    contexto,
+                    "Sequência incorreta. Os disjuntores foram desligados.",
+                    tempo_ms
+                )
+
+    def atualizar(jogador, tempo_ms):
+        if lanterna["coletada"] and lanterna["bateria"] > 0:
+            lanterna["bateria"] -= 0.025
+            lanterna["bateria"] = max(
+                0,
+                lanterna["bateria"]
+            )
+
+        for vulto in vultos:
+            if puzzle_disjuntores.resolvido:
+                vulto.perseguir(
+                    jogador,
+                    sala.paredes_colisao(),
+                    tempo_ms,
+                    vultos
+                )
+
+                vulto.tentar_atacar(
+                    jogador,
+                    tempo_ms
+                )
+
+        if sala.porta_aberta and sala.jogador_na_porta(jogador):
+            contexto["final"] = True
+
+    def desenhar_extra(surf, tempo_ms):
+        puzzle_disjuntores.desenhar(surf)
+
+        if not lanterna["coletada"]:
+            pygame.draw.rect(
+                surf,
+                (230, 210, 80),
+                (
+                    lanterna["pos"][0] - 10,
+                    lanterna["pos"][1] - 7,
+                    20,
+                    14
+                )
+            )
+
+        for x, y in [(200, 120), (1350, 180)]:
+            piscando = (tempo_ms // 400) % 2 == 0
+
+            cor = (
+                (255, 220, 80)
+                if piscando
+                else (80, 70, 40)
+            )
+
+            pygame.draw.rect(
+                surf,
+                (50, 50, 50),
+                (x, y, 60, 70)
+            )
+
+            pygame.draw.circle(
+                surf,
+                cor,
+                (x + 30, y + 25),
+                7
+            )
+
+        for vulto in vultos:
+            vulto.desenhar(surf, tempo_ms)
+
+    contexto["ao_interagir"] = interagir
+    contexto["ao_atualizar"] = atualizar
+    contexto["ao_desenhar_extra"] = desenhar_extra
+
+    def status():
+        ativados = sum(
+            1
+            for d in puzzle_disjuntores.disjuntores
+            if d["ligado"]
+        )
+
+        bateria = int(lanterna["bateria"])
+
+        return (
+            f"Disjuntores: {ativados}/4 | "
+            f"Lanterna: {bateria}%"
+        )
+
+    contexto["texto_status"] = status
+
+    return contexto
+
+def nivel_10(jogador, reset=True):
+    if reset:
+        jogador.sanidade = 100
+        jogador.agachado = False
+
+    sala = Sala(
+        1700,
+        950,
+        (90, 450),
+        largura_tela=LARGURA,
+        altura_tela=ALTURA
+    )
+
+    frascos = gerar_frascos_na_sala(3)
+
+    puzzle_fuzil = PuzzleFuzil(
+        (850, 470),
+        golpes_necessarios=3
+    )
+
+    contexto = _estado_base(
+        sala,
+        10,
+        frascos=frascos,
+        puzzle_fuzil=puzzle_fuzil,
+        usa_lanterna=False,
+        mensagem_intro=(
+            'Você chegou a um pátio. '
+            'Há materiais espalhados pelo local.'
+        ),
+        duracao_intro=3500,
+        taxa_dano_sanidade=0.003,
+        texto_status="Atravesse o pátio."
+    )
+
+    def interagir(jogador, tempo_ms):
+        # Fuzil
+        if puzzle_fuzil.perto(jogador):
+
+            if puzzle_fuzil.consertado:
+                _definir_mensagem(
+                    contexto,
+                    "O reparo já foi concluído.",
+                    tempo_ms
+                )
+                return
+
+            puzzle_fuzil.golpear()
+
+            if puzzle_fuzil.consertado:
+                sala.porta_aberta = True
+
+                _definir_mensagem(
+                    contexto,
+                    "O fuzil foi consertado! As luzes se acendem e as sirenes começam a tocar.",
+                    tempo_ms,
+                    5000
+                )
+
+            else:
+                _definir_mensagem(
+                    contexto,
+                    f"Você trabalha no reparo... "
+                    f"{puzzle_fuzil.golpes}/"
+                    f"{puzzle_fuzil.golpes_necessarios}",
+                    tempo_ms,
+                    1500
+                )
+
+    def atualizar(jogador, tempo_ms):
+        if sala.porta_aberta and sala.jogador_na_porta(jogador):
+            contexto["final"] = True
+
+    def desenhar_extra(surf, tempo_ms):
+        for frasco in frascos:
+            frasco.desenhar(surf)
+
+        puzzle_fuzil.desenhar(
+            surf,
+            pygame.font.Font(None, 24)
+        )
+
+        if puzzle_fuzil.consertado:
+            for x, y in [
+                (250, 150),
+                (600, 150),
+                (1000, 150),
+                (1400, 150)
+            ]:
+                pygame.draw.circle(
+                    surf,
+                    (255, 240, 150),
+                    (x, y),
+                    12
+                )
+
+        if puzzle_fuzil.consertado:
+            if (tempo_ms // 250) % 2 == 0:
+                pygame.draw.rect(
+                    surf,
+                    (200, 30, 30),
+                    (20, 70, 30, 30)
+                )
+
+    contexto["ao_interagir"] = interagir
+    contexto["ao_atualizar"] = atualizar
+    contexto["ao_desenhar_extra"] = desenhar_extra
+
+    def status():
+        if puzzle_fuzil.consertado:
+            return "Fuzil reparado. Atravesse o pátio!"
+
+        return (
+            f"Reparo do fuzil: "
+            f"{puzzle_fuzil.golpes}/"
+            f"{puzzle_fuzil.golpes_necessarios}"
+        )
+
+    contexto["texto_status"] = status
+
+    return contexto
+
+def nivel_11(jogador, reset=True):
+    if reset:
+        jogador.sanidade = 100
+        jogador.agachado = False
+        jogador.tem_pe_de_cabra = False
+
+    obstaculos = [
+        pygame.Rect(450, 300, 90, 90),
+        pygame.Rect(750, 500, 100, 80),
+        pygame.Rect(1050, 280, 90, 100),
+        pygame.Rect(1350, 520, 100, 80)
+    ]
+
+    sala = Sala(
+        1800,
+        900,
+        (80, 430),
+        largura_tela=LARGURA,
+        altura_tela=ALTURA,
+        obstaculos=obstaculos
+    )
+
+    sala.porta_aberta = False
+
+    guardas = [
+        Inimigo(
+            650, 100,
+            velocidade=2.8,
+            dano=3,
+            recarga_ms=1000,
+            atraso_ms=0,
+            lado_desvio=1
+        ),
+
+        Inimigo(
+            1100, 700,
+            velocidade=3.0,
+            dano=3,
+            recarga_ms=1000,
+            atraso_ms=700,
+            lado_desvio=-1
+        ),
+
+        Inimigo(
+            1500, 100,
+            velocidade=3.2,
+            dano=3,
+            recarga_ms=900,
+            atraso_ms=1400,
+            lado_desvio=1
+        )
+    ]
+
+    pe_de_cabra = {
+        "pos": (1550, 450),
+        "coletado": False
+    }
+
+    contexto = _estado_base(
+        sala,
+        11,
+        guardas=guardas,
+        objetos=[],
+        usa_lanterna=False,
+        mensagem_intro=(
+            'As câmeras detectam você. '
+            'A VOZ: "CORRA!"'
+        ),
+        duracao_intro=3000,
+        taxa_dano_sanidade=0.006,
+        texto_status="Corra até a saída."
+    )
+
+    contexto["portas_fechando"] = True
+    contexto["tempo_fechamento"] = None
+
+    def interagir(jogador, tempo_ms):
+        if not pe_de_cabra["coletado"]:
+            distancia = math.hypot(
+                jogador.get_rect().centerx -
+                pe_de_cabra["pos"][0],
+
+                jogador.get_rect().centery -
+                pe_de_cabra["pos"][1]
+            )
+
+            if distancia <= 60:
+                pe_de_cabra["coletado"] = True
+                jogador.tem_pe_de_cabra = True
+
+                _definir_mensagem(
+                    contexto,
+                    "Você pegou o pé de cabra!",
+                    tempo_ms
+                )
+
+                return
+
+        if (
+            pe_de_cabra["coletado"]
+            and sala.jogador_na_porta(jogador)
+        ):
+            sala.porta_aberta = True
+
+            _definir_mensagem(
+                contexto,
+                "Você arrombou a porta!",
+                tempo_ms,
+                3000
+            )
+
+    def atualizar(jogador, tempo_ms):
+
+        if contexto["tempo_inicio"] + 2500 < tempo_ms:
+            for guarda in guardas:
+                guarda.surgir(tempo_ms)
+
+        for guarda in guardas:
+            guarda.perseguir(
+                jogador,
+                sala.paredes_colisao(),
+                tempo_ms,
+                guardas
+            )
+
+            guarda.tentar_atacar(
+                jogador,
+                tempo_ms
+            )
+
+        if (
+            sala.porta_aberta
+            and sala.jogador_na_porta(jogador)
+        ):
+            contexto["final"] = True
+
+    def desenhar_extra(surf, tempo_ms):
+        for caixa in obstaculos:
+            pygame.draw.rect(
+                surf,
+                (105, 70, 45),
+                caixa,
+                border_radius=4
+            )
+
+            pygame.draw.rect(
+                surf,
+                (50, 30, 20),
+                caixa,
+                width=3,
+                border_radius=4
+            )
+
+        for x, y in [
+            (250, 100),
+            (700, 100),
+            (1150, 100),
+            (1600, 100)
+        ]:
+            cor = (
+                (255, 40, 40)
+                if (tempo_ms // 300) % 2 == 0
+                else (80, 20, 20)
+            )
+
+            pygame.draw.circle(
+                surf,
+                cor,
+                (x, y),
+                10
+            )
+
+        for guarda in guardas:
+            guarda.desenhar(
+                surf,
+                tempo_ms
+            )
+
+        if not pe_de_cabra["coletado"]:
+            pygame.draw.line(
+                surf,
+                (180, 140, 70),
+                (
+                    pe_de_cabra["pos"][0] - 15,
+                    pe_de_cabra["pos"][1] + 8
+                ),
+                (
+                    pe_de_cabra["pos"][0] + 15,
+                    pe_de_cabra["pos"][1] - 8
+                ),
+                6
+            )
+
+    contexto["ao_interagir"] = interagir
+    contexto["ao_atualizar"] = atualizar
+    contexto["ao_desenhar_extra"] = desenhar_extra
+
+    def status():
+        if pe_de_cabra["coletado"]:
+            return "Pé de cabra encontrado. Arrombe a porta!"
+
+        return "Corra! Encontre uma saída."
+
+    contexto["texto_status"] = status
+
+    return contexto
+
+def nivel_12(jogador, reset=True):
+    if reset:
+        jogador.sanidade = 100
+        jogador.agachado = False
+
+    sala = Sala(
+        1800,
+        1100,
+        (100, 500),
+        largura_tela=LARGURA,
+        altura_tela=ALTURA
+    )
+
+    sala.porta_aberta = True
+
+    documentos = [
+        Documento(
+            400,
+            300,
+            "Ficha: Paciente 724. Estado: instável.",
+            especial=False
+        ),
+
+        Documento(
+            750,
+            600,
+            "Relatório: o paciente afirma ouvir uma voz.",
+            especial=False
+        ),
+
+        Documento(
+            1100,
+            350,
+            "Ficha do paciente: Operário 724.",
+            especial=True
+        )
+    ]
+
+    janela = pygame.Rect(
+        1600,
+        450,
+        100,
+        150
+    )
+
+    contexto = _estado_base(
+        sala,
+        12,
+        objetos=[],
+        documentos=documentos,
+        mensagem_intro=(
+            'Você entra em uma grande biblioteca. '
+            'A VOZ: "PARE!"'
+        ),
+        duracao_intro=4000,
+        taxa_dano_sanidade=0.003,
+        texto_status="Procure uma saída."
+    )
+
+    contexto["ficha_encontrada"] = False
+    contexto["voz_revelada"] = False
+
+    def interagir(jogador, tempo_ms):
+
+        for documento in documentos:
+            if documento.coletado:
+                continue
+
+            if jogador.get_rect().colliderect(
+                documento.rect.inflate(30, 30)
+            ):
+                documento.coletado = True
+
+                if documento.especial:
+                    contexto["ficha_encontrada"] = True
+                    contexto["voz_revelada"] = True
+
+                    _definir_mensagem(
+                        contexto,
+                        (
+                            'Você encontra sua própria ficha. '
+                            '"Paciente 724"... A voz era a sua própria mente.'
+                        ),
+                        tempo_ms,
+                        6000
+                    )
+
+                else:
+                    _definir_mensagem(
+                        contexto,
+                        documento.texto,
+                        tempo_ms,
+                        3500
+                    )
+
+                return
+
+        if (
+            contexto["ficha_encontrada"]
+            and jogador.get_rect().colliderect(
+                janela.inflate(30, 30)
+            )
+        ):
+            contexto["final"] = True
+
+    def atualizar(jogador, tempo_ms):
+
+        if contexto["ficha_encontrada"]:
+
+            if (
+                tempo_ms -
+                contexto["tempo_inicio"]
+            ) > 5000:
+
+                contexto["texto_status"] = (
+                    "A voz não desaparece. "
+                    "Vá até a janela!"
+                )
+
+    def desenhar_extra(surf, tempo_ms):
+
+        for x in [250, 600, 950, 1300]:
+            pygame.draw.rect(
+                surf,
+                (70, 45, 30),
+                (x, 120, 160, 60)
+            )
+
+            pygame.draw.rect(
+                surf,
+                (70, 45, 30),
+                (x, 800, 160, 60)
+            )
+
+        for documento in documentos:
+            documento.desenhar(surf)
+
+        pygame.draw.rect(
+            surf,
+            (30, 50, 80),
+            janela
+        )
+
+        pygame.draw.rect(
+            surf,
+            (180, 180, 190),
+            janela,
+            width=5
+        )
+
+        pygame.draw.line(
+            surf,
+            (180, 180, 190),
+            janela.centerx,
+            janela.top,
+            janela.centerx,
+            janela.bottom
+        )
+
+        if contexto["ficha_encontrada"]:
+
+            for y in [250, 500, 750]:
+                pygame.draw.circle(
+                    surf,
+                    (180, 180, 180),
+                    (1500, y),
+                    8
+                )
+
+    contexto["ao_interagir"] = interagir
+    contexto["ao_atualizar"] = atualizar
+    contexto["ao_desenhar_extra"] = desenhar_extra
+
+    def status():
+        if not contexto["ficha_encontrada"]:
+            return "Encontre documentos e descubra quem é o Paciente 724."
+
+        return "A voz nunca irá desaparecer. Vá até a janela!"
+
+    contexto["texto_status"] = status
+
+    return contexto
