@@ -1,5 +1,5 @@
 ## 1. Título do Jogo: 
-**O Eco do Abismo.** 
+**Eco do Abismo** 
 
 ## 2. Descrição Geral: 
 * **Tipo de Jogo:** Thriller Psicológico / Aventura Narrativa.
@@ -7,7 +7,7 @@
 * **Ideia principal:** O personagem deve passar pelos puzzels e escapar de onde ele está preso. 
 
 ## 3. Objetivo do Jogo
-O que o jogador precisa fazer pra vencer: Atravessar as salas industriais e "hackear" painéis de rádio para abrir portas antes que o tempo ou a sanidade do personagem se esgotem.
+O que o jogador precisa fazer pra vencer: Atravessar as salas industriais, resolver os puzzles, fugir dos inimigos e tomar as pílulas antes que a sanidade acabe.
 Qual é a meta principal: Concluir a narrativa alcançando a porta final (o terraço do hospital). 
 
 ## 4. Personagem Principal
@@ -21,7 +21,8 @@ Qual é a meta principal: Concluir a narrativa alcançando a porta final (o terr
 * **Câmeras de Segurança:** Sentinelas eletrônicas fixas com campo de visão cônico e movimento automático. Se detectado, o jogador retorna ao início da sala.
 * **Portas Eletrônicas Trancadas:** Bloqueios que exigem a resolução de minijogos de ondas de rádio para prosseguir.
 * **Colapso Mental:** Se a barra de sanidade chegar a 0%, o jogador desmaia e reinicia na sala atual.
-* **Vazamento de Gás:** Tubulações rompidas que espalham gás pelo cenário. Enquanto o jogador não fechar a válvula correspondente, a barra de sanidade diminui de forma acelerada.
+* **Vazamento de Gás:** Tubulações rompidas que espalham gás pelo cenário. Enquanto o jogador não fechar a válvula correspondente, a barra de oxigênio diminui de forma acelerada.
+* **Vultos:** Inimigos que perseguem jogador e o atacam até que o jogador passe de fase ou que os mate.
 
 ## 6. Cenário:
 * **Tipo de ambiente do jogo:** Salas e corredores da mineradora espacial.
@@ -36,9 +37,9 @@ Qual é a meta principal: Concluir a narrativa alcançando a porta final (o terr
 ## 8. Sistema de vida 
 * **Substituição de Vida por Sanidade:** Não há sistema de vidas numéricas. O jogo é gerido pela Barra de Sanidade (inicia em 100%).
 * **Consumo de Pílulas:** Ao usar a pílula para enxergar pistas da alucinação, a sanidade cai drasticamente.
-* **Efeito do Gás:** Enquanto houver um vazamento ativo na sala, a sanidade do jogador é drenada continuamente. Quanto mais tempo ele demorar para fechar a válvula de gás, mais rápido a barra esvazia.
+* **Barra de oxigênio:** Enquanto houver um vazamento ativo na sala, o oxigênio do jogador é drenada continuamente. Quanto mais tempo ele demorar para fechar a válvula de gás, mais rápido a barra esvazia, se a barra esvaziar por completo, o jogador morre e volta pro início da fase.
 * **Checkpoints:** Ser detectado pelas câmeras ou ter a sanidade zerada faz o jogador reiniciar na entrada da sala em que se encontra.
-* **O que acontece quando a sanidade acaba:** Ele enloquece e o volta da estaca zero.
+* **O que acontece quando a sanidade acaba:** Ele enloquece e volta da estaca zero.
 
 ## 9. Controles
 * **Quais teclas serão usadas:** W, A, S, D, ou Setas direcionais, E e Esc.
@@ -49,7 +50,7 @@ Qual é a meta principal: Concluir a narrativa alcançando a porta final (o terr
 
 ## 10. Fluxo do jogo
 * **Como o jogo começa:** O jogador começa em uma cela escura e a "Voz" sussurra instruções para fuga. Ele toma a primeira pílula acreditando que ela fará bem para sua estabilidade.
-* **O que acontece durante a partida:** O jogador atravessa salas alternando o uso de pílulas para resolver puzzles, desviar de câmeras e conter vazamentos de gás. Ele precisa gerenciar a queda drástica de sanidade que ocorre toda vez que o efeito da pílula passa.
+* **O que acontece durante a partida:** O jogador atravessa salas alternando o uso de pílulas para resolver puzzles, desviar de câmeras, conter vazamentos de gás e evitar/matar os vultos. Ele precisa gerenciar a queda drástica de sanidade que ocorre toda vez que o efeito da pílula passa.
 * **Condições de vitória e derrota:** 
   * **Vitória:** Resolver os puzzels e passar pelas fases pra chegar no final. 
   * **Derrota:** Ter a Barra de Sanidade zerada por falta de pílulas ou inalação de gás, ou ser pego pelas câmeras de segurança, forçando o retorno ao início da sala atual.
@@ -63,19 +64,17 @@ Qual é a meta principal: Concluir a narrativa alcançando a porta final (o terr
 ## 12. Estrutura do Projeto
 ```text
 o-eco-do-abismo/
-│
-├── assets/                  # Arquivos de mídia
-│   ├── sprites/             # Pixel art da estação, válvulas, frascos e hospital
-│   ├── sound/               # Efeitos de gás, estática e sussurros
-│   └── fonts/               # Fontes cursiva e de jornal
-│
 ├── src/                     # Código-fonte do jogo
 │   ├── main.py              # Loop principal do jogo
 │   ├── personagem.py        # Movimentação e lógica de sanidade
 │   ├── nivel.py             # Gerenciamento de mapa, colisões e gás
 │   ├── puzzle.py            # Minijogo de ondas senoidais
 │   ├── interface_usuario.py # Sistema de diálogos e efeitos visuais
-│   └── configuracoes.py     # Configurações de resolução e FPS
+│   ├── configuracoes.py     # Configurações de resolução e FPS
+|   ├── assets/                  # Arquivos de mídia
+       ├── sprites/             # Pixel art da estação, válvulas, frascos e hospital
+       ├── sound/               # Efeitos de gás, estática e sussurros
+       └── fonts/               # Fontes cursiva e de jornal
 │
 ├── README.md                # Documentação do projeto
 └── requirements.txt         # Dependências (ex: pygame)
@@ -92,3 +91,23 @@ o-eco-do-abismo/
 * Filtro de distorção visual (efeito CRT) que chia e treme com sanidade baixa.
 * Sistema de iluminação dinâmica com sombras em tempo real.
 * Dublagem em áudio para a "Voz".
+
+## 15. O que já foi concluido
+* *Configuracões
+* *Implementação de inimigos
+* *Implementação das sprites do jogador
+* *Barra de sanidade e de oxigênio
+* *Implementação das fases
+* *Implementação de puzzles
+* *Movimentação lógica
+
+## 16. O que falta ser implementado
+* *Sistema de mídia
+* *Sprites do mapa e dos inimigos
+* *Modificar a dificuldade
+* *Cena final do jogo
+* Melhoramento da estética
+
+Quanto já foi feito: 75%
+
+
