@@ -9,6 +9,9 @@ from itens import gerar_frascos_na_sala, Dica, Documento, Chave, MascaraGas
 from interface_usuario import (desenhar_hud, desenhar_mensagem_contextual, desenhar_flash_detectado,
                                 desenhar_barra_oxigenio, desenhar_overlay_gas,
                                 desenhar_escuridao_com_lanterna)
+from configuracoes import CIANO_BRILHO
+from itens import FrascoSanidade
+from audio import AudioEspacial
 from puzzle import (CaixaArrastavel, PuzzleCaixaFerramentas, PuzzlePainelSenha, PuzzleCofre,
                     PuzzleValvulas, PuzzleFuzil)
 
@@ -543,119 +546,415 @@ def nivel_6(jogador, resetar_jogador=False):
     return contexto
 
 
-NIVEIS = {
-    1: nivel_1, 2: nivel_2, 3: nivel_3, 4: nivel_4, 5: nivel_5, 6: nivel_6, 9: nivel_9, 10: nivel_10, 11: nivel_11, 12: nivel_12
-}
+# =====================================================================
+# FASE 7 - ALA MÉDICA: silêncio, escuridão e alucinação sonora
+#
+# O jogador precisa achar a CHAVE DA ALA MÉDICA guiando-se só pelo
+# barulho real (um monitor que dá dois bipes, sempre no mesmo ritmo).
+# Há bipes falsos (outro tom ou ritmo, em lugares aleatórios) e vozes
+# falsas que chamam o jogador para armadilhas. A única voz confiável é
+# A VOZ de antes: grave, estável, no centro da cabeça, legenda branca.
+# =====================================================================
+
+# --- ajuste fino: mexa aqui para deixar mais fácil ou mais difícil ---
+F7_RAIO_VISAO = 120            # px de visão ao redor do jogador (curto de propósito)
+F7_ESCURIDAO_ALPHA = 250       # 255 = breu total; menos que isso deixa o cenário um pouco visível
+F7_ALCANCE_BIP_REAL = 1000     # até onde o bip real é ouvido
+F7_ALCANCE_BIP_FALSO = 800
+F7_ALCANCE_VOZ_FALSA = 900
+F7_PERIODO_BIP_MS = 2400       # intervalo do bip real (sempre igual: é o que o denuncia)
+F7_PERIODO_FECHADURA_MS = 1800
+F7_CUSTO_FOCO_SANIDADE = 0.8   # sanidade por segundo enquanto segura F (escutar parado)
+F7_DANO_SUSTO = 10             # sanidade perdida ao ir até uma voz falsa
+F7_RAIO_SUSTO = 120
+
+F7_POS_CHAVE = (748, 881)      # centro da chave (e do monitor que bipa)
+F7_POS_PORTA = (1780, 500)
+
+F7_FALAS_REAIS_SEQ = [
+    "Ainda sou eu. Não responda às outras vozes.",
+    "Escute o monitor: dois bipes, sempre no mesmo ritmo.",
+]
+F7_FALAS_REAIS_POOL = [
+    "Só o som que se repete no mesmo lugar é real.",
+    "Fique quieto e ouça. Segure F.",
+    "As outras vozes mudam de lugar. O bip não.",
+    "A chave está onde alguém velava os doentes.",
+    "Não vá até onde elas chamam.",
+]
+F7_FALA_PERTO = "Está perto... continue ouvindo."
+F7_FALA_CHAVE = "Você pegou! Agora ouça a fechadura da ala médica."
+
+F7_FALAS_FALSAS = [
+    "A chave está aqui... venha.",
+    "Eu sou a voz de verdade. A outra mente.",
+    "Não escute o bip... é ele que te prende.",
+    "Operário 724... você já esteve nesta cama.",
+    "Por aqui. Por aqui. Por aqui.",
+    "Vire à esquerda... não, à direita...",
+    "A VOZ: não confie em mim.",
+    "Tire a máscara... respire fundo...",
+]
 
 
-def iniciar_sala(jogador, nivel, resetar_jogador=False):
-    fn = NIVEIS.get(nivel, nivel_1)
-    contexto = fn(jogador, resetar_jogador=resetar_jogador)
-    contexto["tempo_inicio"] = pygame.time.get_ticks()
+def _f7_pontos_de_chamado():
+    # centros dos corredores entre as fileiras de macas (o jogador cabe ali)
+    return [(x, y) for y in (285, 545, 835) for x in (130, 400, 700, 1000, 1300, 1600)]
+
+
+def _f7_desenhar_maca(surf, r):
+    pygame.draw.rect(surf, (88, 94, 104), r.inflate(8, 8), border_radius=6)
+    pygame.draw.rect(surf, (176, 184, 190), r, border_radius=5)
+    pygame.draw.rect(surf, (214, 220, 224), (r.x + 8, r.y + 10, 34, r.height - 20), border_radius=6)
+    pygame.draw.rect(surf, (130, 150, 160), (r.x + 52, r.y + 6, r.width - 60, r.height - 12), border_radius=4)
+    pygame.draw.rect(surf, (60, 65, 72), r.inflate(8, 8), width=2, border_radius=6)
+
+
+def _f7_desenhar_silhueta(surf, r, tempo_ms, indice):
+    """Pacientes alucinados: aparecem e somem nas macas (só enfeite, não machucam)."""
+    onda = math.sin(tempo_ms / 1900 + indice * 2.3)
+    if onda < 0.45:
+        return
+    a = int(150 * (onda - 0.45) / 0.55)
+    fig = pygame.Surface((r.width, r.height), pygame.SRCALPHA)
+    pygame.draw.ellipse(fig, (20, 14, 30, a), (10, 12, 34, r.height - 24))
+    pygame.draw.polygon(fig, (20, 14, 30, a),
+                        [(44, 16), (r.width - 8, 24), (r.width - 8, r.height - 24), (44, r.height - 16)])
+    surf.blit(fig, r.topleft)
+
+
+def _f7_desenhar_remedios(surf, remedios):
+    for (x, y, cor, tipo) in remedios:
+        if tipo == 0:
+            pygame.draw.circle(surf, cor, (x, y), 4)
+        elif tipo == 1:
+            pygame.draw.rect(surf, cor, (x, y, 10, 5), border_radius=2)
+        else:
+            pygame.draw.rect(surf, (200, 200, 205), (x, y, 18, 12))
+            pygame.draw.circle(surf, cor, (x + 5, y + 6), 3)
+            pygame.draw.circle(surf, cor, (x + 13, y + 6), 3)
+
+
+def _f7_desenhar_posto(surf, balcao, chave, tem_chave, batida):
+    pygame.draw.rect(surf, (70, 60, 52), balcao, border_radius=4)
+    pygame.draw.rect(surf, (35, 30, 26), balcao, width=3, border_radius=4)
+    tela = pygame.Rect(balcao.x + 150, balcao.y - 34, 52, 34)
+    pygame.draw.rect(surf, (25, 28, 32), tela, border_radius=3)
+    cor = (80, 255, 140) if (batida and not tem_chave) else (20, 70, 40)
+    pontos = [(tela.x + 4, tela.centery), (tela.x + 16, tela.centery), (tela.x + 21, tela.y + 6),
+              (tela.x + 27, tela.bottom - 5), (tela.x + 32, tela.centery), (tela.right - 4, tela.centery)]
+    pygame.draw.lines(surf, cor, False, pontos, 2)
+    if not chave.coletada:
+        chave.desenhar(surf)
+
+
+def _f7_glitch(texto, tempo_ms, semente):
+    rng = random.Random(semente * 7919 + tempo_ms // 130)
+    return "".join(rng.choice("#%&?*/~") if (c != " " and rng.random() < 0.07) else c for c in texto)
+
+
+def _f7_desenhar_escuridao(surf, sala, jogador, tempo_ms, piscada):
+    cam_x, cam_y = sala.calcular_camera(jogador)
+    cx, cy = jogador.get_rect().center
+    fator = max(0.0, min(1.0, getattr(jogador, "sanidade", 100) / 100.0))
+    raio = F7_RAIO_VISAO * (0.65 + 0.35 * fator)          # sanidade baixa = enxerga menos
+    if piscada:
+        raio *= 0.55
+    raio += 6 * math.sin(tempo_ms / 170) + 4 * math.sin(tempo_ms / 53)
+    cx += int(3 * math.sin(tempo_ms / 97))
+    cy += int(3 * math.cos(tempo_ms / 121))
+
+    escuro = pygame.Surface((LARGURA, ALTURA), pygame.SRCALPHA)
+    escuro.fill((2, 10, 6, F7_ESCURIDAO_ALPHA))
+    passos = 9
+    for k in range(passos):                                 # borda borrada, de fora para dentro
+        r = int(raio * (1.25 - 0.95 * k / (passos - 1)))
+        a = int(F7_ESCURIDAO_ALPHA * (1 - k / (passos - 1)) ** 1.3)
+        pygame.draw.circle(escuro, (2, 10, 6, a), (cx - cam_x, cy - cam_y), max(2, r))
+    surf.blit(escuro, (cam_x, cam_y))
+
+
+def nivel_7(jogador, resetar_jogador=False):
+    if resetar_jogador:
+        jogador.sanidade = 100
+        jogador.tem_pe_de_cabra = False
+    jogador.agachado = False
+
+    # ---- cenário: 3 fileiras de macas, posto de enfermagem, carrinhos ----
+    macas = [pygame.Rect(x, y, 140, 70) for y in (120, 380, 640) for x in (250, 550, 850, 1150)]
+    balcao = pygame.Rect(620, 890, 260, 70)
+    carrinhos = [pygame.Rect(430, 900, 60, 60), pygame.Rect(1000, 900, 60, 60),
+                 pygame.Rect(1500, 240, 60, 60), pygame.Rect(1560, 760, 60, 60)]
+    obstaculos = macas + [balcao] + carrinhos
+
+    sala = Sala(1800, 1000, ponto_entrada=(90, 470), largura_tela=LARGURA, altura_tela=ALTURA,
+                obstaculos=obstaculos)
+    jogador.x, jogador.y = sala.ponto_entrada
+    sala.porta_aberta = False
+
+    rng = random.Random(7)
+    cores = [(220, 60, 60), (235, 235, 235), (240, 200, 60), (70, 150, 230), (120, 200, 120)]
+    remedios = []
+    while len(remedios) < 90:
+        x, y = rng.randint(60, 1720), rng.randint(60, 930)
+        if any(pygame.Rect(x - 8, y - 8, 24, 20).colliderect(o) for o in obstaculos):
+            continue
+        remedios.append((x, y, rng.choice(cores), rng.randint(0, 2)))
+
+    frascos = [FrascoSanidade(420, 300), FrascoSanidade(1000, 555), FrascoSanidade(1450, 420)]
+    chave = Chave(740, 876, rotulo="Chave da Ala Médica")
+
+    audio = AudioEspacial()
+    agora = pygame.time.get_ticks()
+
+    contexto = _estado_base(
+        sala, 7,
+        frascos=frascos,
+        taxa_dano_sanidade=0.006,
+        mensagem_intro='A VOZ: "Não há luz aqui. Confie só no som que se repete."',
+        duracao_intro=5500,
+        condicao_transicao=lambda contexto, jogador: False,
+    )
+    contexto["e7"] = {
+        "audio": audio,
+        "ultimo": agora,
+        "tem_chave": False,
+        "focando": False,
+        "assistencia": not audio.ativo,      # sem áudio: seta visual ligada sozinha
+        "pos_ant": None,
+        "prox_bip_real": agora + 2500,
+        "prox_bip_falso": agora + 9000,
+        "prox_chiado": agora + 800,
+        "prox_zumbido": agora + 22000,
+        "zumbido_ate": 0,
+        "prox_voz_real": agora + 6000,
+        "n_falas_reais": 0,
+        "perto_avisado": False,
+        "prox_chamado": agora + 12000,
+        "chamados": [],
+        "legendas": [],
+        "susto_ate": 0,
+        "batida_ate": 0,
+        "prox_piscada": agora + 8000,
+        "piscada_ate": 0,
+    }
+
+    def origem_real():
+        return F7_POS_PORTA if contexto["e7"]["tem_chave"] else F7_POS_CHAVE
+
+    def ao_atualizar(contexto, jogador, teclas, tempo_ms):
+        e = contexto["e7"]
+        audio = e["audio"]
+        sala = contexto["sala"]
+        dt = min((tempo_ms - e["ultimo"]) / 1000, 0.1)
+        e["ultimo"] = tempo_ms
+        centro = jogador.get_rect().center
+
+        # --- F: parar e escutar (sem andar, ouve mais longe e o chiado some um pouco) ---
+        e["focando"] = bool(teclas[pygame.K_f])
+        if e["focando"]:
+            if e["pos_ant"] is not None:
+                jogador.x, jogador.y = e["pos_ant"]
+            jogador.andando = False
+            jogador.dano_sanidade(F7_CUSTO_FOCO_SANIDADE * dt)
+        e["pos_ant"] = (jogador.x, jogador.y)
+        centro = jogador.get_rect().center
+
+        zumbindo = tempo_ms < e["zumbido_ate"]
+        ganho = 0.25 if zumbindo else 1.0                     # zumbido nos ouvidos abafa tudo
+        alcance_real = F7_ALCANCE_BIP_REAL * (1.5 if e["focando"] else 1.0)
+        ganho_ruido = 0.35 if e["focando"] else 1.0           # focar reduz o que é falso
+        pan_erro = 0.18 * math.sin(tempo_ms / 2300)           # ouvido desregulado
+        origem = origem_real()
+
+        # --- o barulho REAL: mesmo tom, mesmo ritmo, mesmo lugar ---
+        if tempo_ms >= e["prox_bip_real"]:
+            if e["tem_chave"]:
+                e["prox_bip_real"] = tempo_ms + F7_PERIODO_FECHADURA_MS
+                audio.tocar_na_posicao("tique_porta", origem, centro, 1100, ganho=0.9 * ganho,
+                                       pan_erro=pan_erro, forcar_abafado=zumbindo)
+            else:
+                e["prox_bip_real"] = tempo_ms + F7_PERIODO_BIP_MS
+                audio.tocar_na_posicao("bip_real", origem, centro, alcance_real, ganho=0.9 * ganho,
+                                       pan_erro=pan_erro, forcar_abafado=zumbindo)
+            e["batida_ate"] = tempo_ms + 170
+
+        # --- bipes FALSOS: lugar aleatório, tom/ritmo diferentes ---
+        if tempo_ms >= e["prox_bip_falso"]:
+            e["prox_bip_falso"] = tempo_ms + random.randint(2200, 4800)
+            candidatos = [p for p in _f7_pontos_de_chamado()
+                          if math.hypot(p[0] - origem[0], p[1] - origem[1]) > 250]
+            nome = random.choice(("falso_agudo", "falso_grave", "falso_triplo", "falso_quase"))
+            audio.tocar_na_posicao(nome, random.choice(candidatos), centro, F7_ALCANCE_BIP_FALSO,
+                                   ganho=0.8 * ganho * ganho_ruido, pan_erro=pan_erro,
+                                   forcar_abafado=zumbindo)
+
+        # --- chiado do gás (o silêncio nunca é total) ---
+        if tempo_ms >= e["prox_chiado"]:
+            e["prox_chiado"] = tempo_ms + 970
+            audio.tocar_central("chiado", ganho=0.16 * ganho_ruido)
+
+        # --- zumbido nos ouvidos de vez em quando ---
+        if tempo_ms >= e["prox_zumbido"]:
+            e["prox_zumbido"] = tempo_ms + random.randint(20000, 34000)
+            e["zumbido_ate"] = tempo_ms + 1800
+            audio.tocar_central("zumbido", ganho=0.35)
+
+        # --- A VOZ de antes (confiável): centrada, grave, legenda branca ---
+        if not e["tem_chave"] and tempo_ms >= e["prox_voz_real"]:
+            n = e["n_falas_reais"]
+            if n < len(F7_FALAS_REAIS_SEQ):
+                fala = F7_FALAS_REAIS_SEQ[n]
+                e["prox_voz_real"] = tempo_ms + 14000
+            else:
+                fala = random.choice(F7_FALAS_REAIS_POOL)
+                e["prox_voz_real"] = tempo_ms + random.randint(24000, 32000)
+            e["n_falas_reais"] += 1
+            _definir_mensagem(contexto, f'A VOZ: "{fala}"', tempo_ms, 4200)
+            audio.tocar_central("voz_real", ganho=0.9 * ganho)
+
+        if (not e["tem_chave"] and not e["perto_avisado"]
+                and math.hypot(centro[0] - F7_POS_CHAVE[0], centro[1] - F7_POS_CHAVE[1]) < 420):
+            e["perto_avisado"] = True
+            _definir_mensagem(contexto, f'A VOZ: "{F7_FALA_PERTO}"', tempo_ms, 3500)
+            audio.tocar_central("voz_real", ganho=0.9 * ganho)
+
+        # --- vozes NOVAS (falsas): chamam de um ponto do mapa; ir até lá dá susto ---
+        if tempo_ms >= e["prox_chamado"] and len(e["chamados"]) < 2:
+            e["prox_chamado"] = tempo_ms + random.randint(10000, 17000)
+            candidatos = [p for p in _f7_pontos_de_chamado()
+                          if 350 <= math.hypot(p[0] - centro[0], p[1] - centro[1]) <= 900
+                          and math.hypot(p[0] - F7_POS_CHAVE[0], p[1] - F7_POS_CHAVE[1]) > 300]
+            if candidatos:
+                e["chamados"].append({
+                    "pos": random.choice(candidatos), "nasceu": tempo_ms, "prox": tempo_ms,
+                    "falas": 0, "tipo": random.choice(("fv_agudo", "fv_sussurro", "fv_grave")),
+                })
+
+        for c in list(e["chamados"]):
+            if tempo_ms >= c["prox"] and c["falas"] < 4:
+                c["prox"] = tempo_ms + 2300
+                c["falas"] += 1
+                audio.tocar_na_posicao(c["tipo"], c["pos"], centro, F7_ALCANCE_VOZ_FALSA,
+                                       ganho=0.85 * ganho * ganho_ruido, pan_erro=pan_erro,
+                                       forcar_abafado=zumbindo)
+                e["legendas"].append({"texto": random.choice(F7_FALAS_FALSAS), "pos": c["pos"],
+                                      "nasceu": tempo_ms, "ate": tempo_ms + 2600,
+                                      "semente": random.randint(1, 999)})
+            if math.hypot(centro[0] - c["pos"][0], centro[1] - c["pos"][1]) < F7_RAIO_SUSTO:
+                jogador.dano_sanidade(F7_DANO_SUSTO)
+                e["susto_ate"] = tempo_ms + 400
+                audio.tocar_central("susto", ganho=0.8)
+                _definir_mensagem(contexto, "Não havia ninguém ali. Era só a alucinação.", tempo_ms, 3000)
+                e["chamados"].remove(c)
+            elif tempo_ms - c["nasceu"] > 12000:
+                e["chamados"].remove(c)
+
+        # --- a visão falha de vez em quando ---
+        if tempo_ms >= e["prox_piscada"]:
+            e["prox_piscada"] = tempo_ms + random.randint(6000, 14000)
+            e["piscada_ate"] = tempo_ms + 350
+
+        if sala.porta_aberta and sala.jogador_na_porta(jogador):
+            audio.parar()
+            contexto["final"] = True
+
+    def ao_interagir(contexto, jogador):
+        e = contexto["e7"]
+        agora = pygame.time.get_ticks()
+        sala = contexto["sala"]
+
+        if not e["tem_chave"] and _perto(jogador, F7_POS_CHAVE, 105):
+            e["tem_chave"] = True
+            chave.coletada = True
+            e["prox_bip_real"] = agora + 600          # o monitor cala; a fechadura passa a bater
+            _definir_mensagem(contexto, f'A VOZ: "{F7_FALA_CHAVE}"', agora, 4500)
+            e["audio"].tocar_central("voz_real", ganho=0.9)
+            return
+
+        if sala.jogador_na_porta(jogador):
+            if not e["tem_chave"]:
+                _definir_mensagem(contexto, "A porta da ala médica está trancada.", agora)
+            elif not sala.porta_aberta:
+                sala.porta_aberta = True
+                _definir_mensagem(contexto, "A fechadura cede. A ala médica está aberta.", agora, 4000)
+
+    def ao_tecla_down(contexto, jogador, evento):
+        if evento.key == pygame.K_v:                   # V: liga/desliga a seta de ajuda
+            e = contexto["e7"]
+            e["assistencia"] = not e["assistencia"]
+            _definir_mensagem(contexto, "Ajuda visual " + ("ligada." if e["assistencia"] else "desligada."),
+                              pygame.time.get_ticks(), 2000)
+
+    def ao_desenhar_extra(contexto, surf, jogador, fonte, tempo_ms):
+        e = contexto["e7"]
+        sala = contexto["sala"]
+        cam_x, cam_y = sala.calcular_camera(jogador)
+        centro = jogador.get_rect().center
+
+        # 1) cenário (a escuridão por cima esconde quase tudo)
+        _f7_desenhar_remedios(surf, remedios)
+        for i, m in enumerate(macas):
+            _f7_desenhar_maca(surf, m)
+            _f7_desenhar_silhueta(surf, m, tempo_ms, i)
+        for c in carrinhos:
+            pygame.draw.rect(surf, (96, 104, 112), c, border_radius=4)
+            pygame.draw.rect(surf, (40, 44, 50), c, width=3, border_radius=4)
+        _f7_desenhar_posto(surf, balcao, chave, e["tem_chave"], tempo_ms < e["batida_ate"])
+
+        # 2) escuridão que falha (a visão pisca e encolhe com a sanidade baixa)
+        _f7_desenhar_escuridao(surf, sala, jogador, tempo_ms, tempo_ms < e["piscada_ate"])
+
+        # 3) por cima da escuridão: seta de ajuda, legendas das vozes falsas, susto
+        if e["assistencia"]:
+            alvo = origem_real()
+            vx, vy = alvo[0] - centro[0], alvo[1] - centro[1]
+            d = math.hypot(vx, vy) or 1.0
+            ux, uy = vx / d, vy / d
+            px, py = centro[0] + ux * 95, centro[1] + uy * 95
+            tri = [(px + ux * 14, py + uy * 14),
+                   (px - uy * 9 - ux * 6, py + ux * 9 - uy * 6),
+                   (px + uy * 9 - ux * 6, py - ux * 9 - uy * 6)]
+            pygame.draw.polygon(surf, CIANO_BRILHO, tri)
+
+        for leg in list(e["legendas"]):
+            restante = leg["ate"] - tempo_ms
+            if restante <= 0:
+                e["legendas"].remove(leg)
+                continue
+            alfa = int(255 * min(1.0, (tempo_ms - leg["nasceu"]) / 200, restante / 500))
+            img = fonte.render(_f7_glitch(leg["texto"], tempo_ms, leg["semente"]), True, (185, 125, 255))
+            img.set_alpha(max(0, alfa))
+            x_tela = max(img.get_width() // 2 + 10,
+                         min(LARGURA - img.get_width() // 2 - 10, leg["pos"][0] - cam_x))
+            y_tela = max(130, min(ALTURA - 140, leg["pos"][1] - cam_y - 90))
+            surf.blit(img, (cam_x + x_tela - img.get_width() // 2 + random.randint(-2, 2),
+                            cam_y + y_tela + random.randint(-2, 2)))
+
+        decorrido = e["susto_ate"] - tempo_ms
+        if 0 < decorrido <= 400:
+            cx, cy = centro
+            marca = pygame.Surface((170, 170), pygame.SRCALPHA)
+            pygame.draw.circle(marca, (*VERMELHO_ALARME, int(140 * decorrido / 400)), (85, 85), 85)
+            surf.blit(marca, (cx - 85, cy - 85))
+
+    def texto_status(contexto):
+        e = contexto["e7"]
+        if e["tem_chave"]:
+            return "VOCÊ TEM: Chave da Ala Médica (ouça a fechadura da porta)"
+        if e["focando"]:
+            return "Escutando... (solte F para andar)"
+        return "Ache a chave pelo som real  |  F: parar e escutar  |  V: ajuda visual"
+
+    contexto["ao_atualizar"] = ao_atualizar
+    contexto["ao_interagir"] = ao_interagir
+    contexto["ao_tecla_down"] = ao_tecla_down
+    contexto["ao_desenhar_extra"] = ao_desenhar_extra
+    contexto["texto_status"] = texto_status
     return contexto
 
 
-def renderizar_jogo(tela, jogador, contexto, offset_x, offset_y, flash_ativo,
-                     fonte_sub, sprites_jogador=None):
-    sala = contexto["sala"]
-    tempo_ms = pygame.time.get_ticks()
-
-    superficie_mundo = pygame.Surface((sala.largura, sala.altura))
-    superficie_mundo.fill(AZUL_ESCURO)
-    cone_surf = pygame.Surface((sala.largura, sala.altura), pygame.SRCALPHA)
-
-    sala.desenhar(superficie_mundo)
-
-    for f in contexto["frascos"]:
-        f.desenhar(superficie_mundo)
-
-    for obj in contexto["objetos"]:
-        obj.desenhar(superficie_mundo)
-
-    duto = contexto["duto"]
-    if duto:
-        pygame.draw.rect(superficie_mundo, (50, 50, 55), duto["corredor"])
-        pygame.draw.rect(superficie_mundo, (80, 80, 85), duto["corredor"], width=2)
-        if not duto["porta_entrada_aberta"]:
-            pygame.draw.rect(superficie_mundo, (140, 140, 150), duto["rect_entrada"])
-        if not duto["porta_saida_aberta"]:
-            pygame.draw.rect(superficie_mundo, (140, 140, 150), duto["rect_saida"])
-
-    caixa_ferramentas = contexto.get("caixa_ferramentas")
-    if caixa_ferramentas:
-        coberta = any(c.rect.colliderect(caixa_ferramentas) for c in contexto["caixas"])
-        if not coberta:
-            pygame.draw.rect(superficie_mundo, (150, 35, 35), caixa_ferramentas, border_radius=3)
-            pygame.draw.rect(superficie_mundo, (220, 200, 50), (caixa_ferramentas.x + 10, caixa_ferramentas.y, 10, 4))
-
-    for cx in contexto["caixas"]:
-        cx.desenhar(superficie_mundo)
-
-    if contexto.get("ao_desenhar_extra"):
-        contexto["ao_desenhar_extra"](contexto, superficie_mundo, jogador, fonte_sub, tempo_ms)
-
-    for camera in contexto["cameras"]:
-        camera.atualizar()
-        camera.desenhar(superficie_mundo, cone_surf, jogador)
-
-    for guarda in contexto["guardas"]:
-        guarda.desenhar(superficie_mundo, cone_surf, jogador)
-
-    isca = contexto.get("isca")
-    if isca and not isca["usada"]:
-        pygame.draw.circle(superficie_mundo, (200, 180, 90), isca["rect"].center, 9)
-
-    superficie_mundo.blit(cone_surf, (0, 0))
-
-    if sprites_jogador:
-        jogador.desenhar(superficie_mundo, sprites_jogador)
-    else:
-        cor_player = (180, 220, 255) if getattr(jogador, 'agachado', False) else BRANCO
-        pygame.draw.rect(superficie_mundo, cor_player, jogador.get_rect(), border_radius=4)
-
-    cam_x, cam_y = sala.calcular_camera(jogador)
-    area_visivel = pygame.Rect(cam_x, cam_y, sala.largura_tela, sala.altura_tela)
-    tela.blit(superficie_mundo, (offset_x, offset_y), area=area_visivel)
-
-    desenhar_hud(tela, jogador, fonte_sub)
-
-    y_status = 100
-    if contexto.get("usa_oxigenio"):
-        desenhar_barra_oxigenio(tela, jogador, fonte_sub)
-        y_status = 175
-
-    texto_status_fn = contexto.get("texto_status")
-    if texto_status_fn:
-        linha = texto_status_fn(contexto)
-        if linha:
-            txt = fonte_sub.render(linha, True, (210, 220, 255))
-            tela.blit(txt, (20, y_status))
-
-    texto_nivel = fonte_sub.render(f"SALA {contexto['nivel']}", True, CINZA_BORDA)
-    tela.blit(texto_nivel, (LARGURA - texto_nivel.get_width() - 20, 20))
-
-    if contexto.get("tint_gas"):
-        desenhar_overlay_gas(tela, LARGURA, ALTURA, intensidade=70)
-
-    if contexto.get("usa_lanterna"):
-        pos_tela = (jogador.get_rect().centerx - cam_x + offset_x, jogador.get_rect().centery - cam_y + offset_y)
-        desenhar_escuridao_com_lanterna(tela, pos_tela, LARGURA, ALTURA,
-                                         ligada=getattr(jogador, "lanterna_ligada", False))
-
-    intro = contexto.get("mensagem_intro")
-    if intro and tempo_ms - contexto["tempo_inicio"] < contexto.get("duracao_intro", 4500):
-        desenhar_mensagem_contextual(tela, intro, LARGURA, ALTURA, fonte_sub, y=ALTURA - 70)
-
-    msg = contexto.get("mensagem_temporaria")
-    if msg and tempo_ms < contexto.get("mensagem_temporaria_expira", 0):
-        desenhar_mensagem_contextual(tela, msg, LARGURA, ALTURA, fonte_sub, y=ALTURA - 40)
-
-    puzzle_modal = contexto.get("puzzle_modal")
-    if puzzle_modal and getattr(puzzle_modal, "ativo", False):
-        puzzle_modal.desenhar(tela, fonte_sub)
-
-    if flash_ativo:
-        desenhar_flash_detectado(tela, LARGURA, ALTURA)
+# (NIVEIS foi movido para o fim do arquivo)
 
 def nivel_9(jogador, reset=True):
     if reset:
@@ -1359,3 +1658,117 @@ def nivel_12(jogador, reset=True):
     contexto["texto_status"] = status
 
     return contexto
+
+
+NIVEIS = {
+    1: nivel_1, 2: nivel_2, 3: nivel_3, 4: nivel_4, 5: nivel_5, 6: nivel_6, 7: nivel_7, 9: nivel_9, 10: nivel_10, 11: nivel_11, 12: nivel_12
+}
+
+def iniciar_sala(jogador, nivel, resetar_jogador=False):
+    fn = NIVEIS.get(nivel, nivel_1)
+    contexto = fn(jogador, resetar_jogador=resetar_jogador)
+    contexto["tempo_inicio"] = pygame.time.get_ticks()
+    return contexto
+
+
+def renderizar_jogo(tela, jogador, contexto, offset_x, offset_y, flash_ativo,
+                     fonte_sub, sprites_jogador=None):
+    sala = contexto["sala"]
+    tempo_ms = pygame.time.get_ticks()
+
+    superficie_mundo = pygame.Surface((sala.largura, sala.altura))
+    superficie_mundo.fill(AZUL_ESCURO)
+    cone_surf = pygame.Surface((sala.largura, sala.altura), pygame.SRCALPHA)
+
+    sala.desenhar(superficie_mundo)
+
+    for f in contexto["frascos"]:
+        f.desenhar(superficie_mundo)
+
+    for obj in contexto["objetos"]:
+        obj.desenhar(superficie_mundo)
+
+    duto = contexto["duto"]
+    if duto:
+        pygame.draw.rect(superficie_mundo, (50, 50, 55), duto["corredor"])
+        pygame.draw.rect(superficie_mundo, (80, 80, 85), duto["corredor"], width=2)
+        if not duto["porta_entrada_aberta"]:
+            pygame.draw.rect(superficie_mundo, (140, 140, 150), duto["rect_entrada"])
+        if not duto["porta_saida_aberta"]:
+            pygame.draw.rect(superficie_mundo, (140, 140, 150), duto["rect_saida"])
+
+    caixa_ferramentas = contexto.get("caixa_ferramentas")
+    if caixa_ferramentas:
+        coberta = any(c.rect.colliderect(caixa_ferramentas) for c in contexto["caixas"])
+        if not coberta:
+            pygame.draw.rect(superficie_mundo, (150, 35, 35), caixa_ferramentas, border_radius=3)
+            pygame.draw.rect(superficie_mundo, (220, 200, 50), (caixa_ferramentas.x + 10, caixa_ferramentas.y, 10, 4))
+
+    for cx in contexto["caixas"]:
+        cx.desenhar(superficie_mundo)
+
+    if contexto.get("ao_desenhar_extra"):
+        contexto["ao_desenhar_extra"](contexto, superficie_mundo, jogador, fonte_sub, tempo_ms)
+
+    for camera in contexto["cameras"]:
+        camera.atualizar()
+        camera.desenhar(superficie_mundo, cone_surf, jogador)
+
+    for guarda in contexto["guardas"]:
+        guarda.desenhar(superficie_mundo, cone_surf, jogador)
+
+    isca = contexto.get("isca")
+    if isca and not isca["usada"]:
+        pygame.draw.circle(superficie_mundo, (200, 180, 90), isca["rect"].center, 9)
+
+    superficie_mundo.blit(cone_surf, (0, 0))
+
+    if sprites_jogador:
+        jogador.desenhar(superficie_mundo, sprites_jogador)
+    else:
+        cor_player = (180, 220, 255) if getattr(jogador, 'agachado', False) else BRANCO
+        pygame.draw.rect(superficie_mundo, cor_player, jogador.get_rect(), border_radius=4)
+
+    cam_x, cam_y = sala.calcular_camera(jogador)
+    area_visivel = pygame.Rect(cam_x, cam_y, sala.largura_tela, sala.altura_tela)
+    tela.blit(superficie_mundo, (offset_x, offset_y), area=area_visivel)
+
+    desenhar_hud(tela, jogador, fonte_sub)
+
+    y_status = 100
+    if contexto.get("usa_oxigenio"):
+        desenhar_barra_oxigenio(tela, jogador, fonte_sub)
+        y_status = 175
+
+    texto_status_fn = contexto.get("texto_status")
+    if texto_status_fn:
+        linha = texto_status_fn(contexto)
+        if linha:
+            txt = fonte_sub.render(linha, True, (210, 220, 255))
+            tela.blit(txt, (20, y_status))
+
+    texto_nivel = fonte_sub.render(f"SALA {contexto['nivel']}", True, CINZA_BORDA)
+    tela.blit(texto_nivel, (LARGURA - texto_nivel.get_width() - 20, 20))
+
+    if contexto.get("tint_gas"):
+        desenhar_overlay_gas(tela, LARGURA, ALTURA, intensidade=70)
+
+    if contexto.get("usa_lanterna"):
+        pos_tela = (jogador.get_rect().centerx - cam_x + offset_x, jogador.get_rect().centery - cam_y + offset_y)
+        desenhar_escuridao_com_lanterna(tela, pos_tela, LARGURA, ALTURA,
+                                         ligada=getattr(jogador, "lanterna_ligada", False))
+
+    intro = contexto.get("mensagem_intro")
+    if intro and tempo_ms - contexto["tempo_inicio"] < contexto.get("duracao_intro", 4500):
+        desenhar_mensagem_contextual(tela, intro, LARGURA, ALTURA, fonte_sub, y=ALTURA - 70)
+
+    msg = contexto.get("mensagem_temporaria")
+    if msg and tempo_ms < contexto.get("mensagem_temporaria_expira", 0):
+        desenhar_mensagem_contextual(tela, msg, LARGURA, ALTURA, fonte_sub, y=ALTURA - 40)
+
+    puzzle_modal = contexto.get("puzzle_modal")
+    if puzzle_modal and getattr(puzzle_modal, "ativo", False):
+        puzzle_modal.desenhar(tela, fonte_sub)
+
+    if flash_ativo:
+        desenhar_flash_detectado(tela, LARGURA, ALTURA)
