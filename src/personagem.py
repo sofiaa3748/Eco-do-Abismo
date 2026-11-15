@@ -313,3 +313,242 @@ class Inimigo(Personagem):
     def desenhar(self, surf, tempo_ms):
         self.desenhar_corpo(surf, tempo_ms)
         self.desenhar_olhos(surf, tempo_ms)
+
+class GuardaPrisao(Personagem):
+    """Guarda da prisão.
+
+    Patrulha uma rota (ou fica parado num posto olhando de um lado para o outro),
+    enxerga dentro de um cone, investiga barulhos e vai enchendo a "suspeita"
+    enquanto vê o jogador. Quando a suspeita chega a 1.0, o jogador foi visto.
+
+    - Agachado, o jogador só é visto de perto (metade do alcance).
+    - Agachado dentro de um esconderijo, só é visto se o guarda quase esbarrar nele.
+    - Paredes bloqueiam a visão.
+    """
+
+    TAMANHO = 50
+    DISTANCIA_ESBARRAO = 45
+    _fonte = None
+    _ponto = None
+
+    def __init__(self, x, y, rota=None, angulo=0.0, velocidade=1.3, alcance=330, abertura=56,
+                 pausa_ms=1500, varredura=0.0, tempo_vista_em_pe=650, tempo_vista_agachado=1300):
+        super().__init__(x, y, nome='Guarda', dano=0)
+        self.origem = (x, y)
+        self.angulo_inicial = angulo
+        self.rota = [tuple(p) for p in rota] if rota else []
+        self.velocidade = velocidade
+        self.alcance = alcance
+        self.abertura = abertura
+        self.pausa_ms = pausa_ms
+        self.varredura = varredura
+        self.tempo_vista_em_pe = tempo_vista_em_pe
+        self.tempo_vista_agachado = tempo_vista_agachado
+        self.paredes = []
+        self.reiniciar()
+
+    def reiniciar(self):
+        self.x, self.y = self.origem
+        self.angulo = self.angulo_inicial
+        self.indice_rota = 1 if len(self.rota) > 1 else 0
+        self.estado = 'patrulha' if len(self.rota) > 1 else 'posto'
+        self.espera_ate = 0
+        self.alvo_som = None
+        self.tempo_investigando = 6000
+        self.olhando_ate = 0
+        self.angulo_chegada = self.angulo
+        self.travado_ms = 0.0
+        self.suspeita = 0.0
+        self.viu = False
+        self._t = None
+
+    def definir_mundo(self, paredes):
+        self.paredes = paredes
+
+    def get_rect(self):
+        return pygame.Rect(int(self.x - self.TAMANHO // 2), int(self.y - self.TAMANHO // 2),
+                           self.TAMANHO, self.TAMANHO)
+
+    def mover(self, direcao):
+        pass
+
+    def _angulo_para(self, ponto):
+        return math.degrees(math.atan2(ponto[1] - self.y, ponto[0] - self.x))
+
+    def _virar(self, alvo, taxa):
+        dif = (alvo - self.angulo + 180) % 360 - 180
+        if abs(dif) <= taxa:
+            self.angulo = alvo % 360
+        else:
+            self.angulo = (self.angulo + (taxa if dif > 0 else -taxa)) % 360
+
+    def _bate(self):
+        return self.get_rect().collidelist(self.paredes) != -1
+
+    def _ir_para(self, ponto, velocidade, fator):
+        vx, vy = ponto[0] - self.x, ponto[1] - self.y
+        dist = math.hypot(vx, vy)
+        passo = velocidade * fator
+        if dist <= passo:
+            self.x, self.y = ponto
+            return True
+        self._virar(self._angulo_para(ponto), 7 * fator)
+        antes = (self.x, self.y)
+        dx, dy = vx / dist * passo, vy / dist * passo
+        self.x += dx
+        if self._bate():
+            self.x -= dx
+        self.y += dy
+        if self._bate():
+            self.y -= dy
+        if math.hypot(self.x - antes[0], self.y - antes[1]) < passo * 0.1:
+            self.travado_ms += fator * 16.667
+            if self.travado_ms > 1200:
+                self.travado_ms = 0.0
+                return True
+        else:
+            self.travado_ms = 0.0
+        return False
+
+    def ouvir(self, ponto, tempo_ms, raio=950, tempo_investigando=6000):
+        if math.hypot(ponto[0] - self.x, ponto[1] - self.y) > raio:
+            return False
+        self.estado = 'investigando'
+        self.alvo_som = (float(ponto[0]), float(ponto[1]))
+        self.tempo_investigando = tempo_investigando
+        self.travado_ms = 0.0
+        return True
+
+    def _comportamento(self, tempo_ms, fator):
+        if self.estado == 'investigando':
+            if self.alvo_som is not None:
+                if self._ir_para(self.alvo_som, self.velocidade * 1.6, fator):
+                    self.alvo_som = None
+                    self.olhando_ate = tempo_ms + self.tempo_investigando
+                    self.angulo_chegada = self.angulo
+            else:
+                self.angulo = (self.angulo_chegada + 40 * math.sin(tempo_ms / 450)) % 360
+                if tempo_ms >= self.olhando_ate:
+                    self.estado = 'voltando'
+        elif self.estado == 'voltando':
+            destino = self.rota[self.indice_rota] if self.rota else self.origem
+            if self._ir_para(destino, self.velocidade, fator):
+                self.estado = 'patrulha' if len(self.rota) > 1 else 'posto'
+        elif self.estado == 'patrulha':
+            destino = self.rota[self.indice_rota]
+            if tempo_ms < self.espera_ate:
+                self._virar(self._angulo_para(destino), 3 * fator)
+            elif self._ir_para(destino, self.velocidade, fator):
+                self.indice_rota = (self.indice_rota + 1) % len(self.rota)
+                self.espera_ate = tempo_ms + self.pausa_ms
+        else:  # posto
+            self._virar(self.angulo_inicial + self.varredura * math.sin(tempo_ms / 1100), 2 * fator)
+
+    def _em_parede(self, px, py):
+        if GuardaPrisao._ponto is None:
+            GuardaPrisao._ponto = pygame.Rect(0, 0, 1, 1)
+        GuardaPrisao._ponto.x = int(px)
+        GuardaPrisao._ponto.y = int(py)
+        return GuardaPrisao._ponto.collidelist(self.paredes) != -1
+
+    def enxerga(self, jogador, esconderijos=()):
+        rect = jogador.get_rect()
+        cx, cy = rect.center
+        dist = math.hypot(cx - self.x, cy - self.y)
+
+        escondido = jogador.agachado and any(e.collidepoint(cx, cy) for e in esconderijos)
+        if escondido:
+            alcance = self.DISTANCIA_ESBARRAO
+        elif jogador.agachado:
+            alcance = self.alcance * 0.5
+        else:
+            alcance = self.alcance
+        if dist > alcance:
+            return False
+
+        if dist > self.DISTANCIA_ESBARRAO:
+            ang = math.degrees(math.atan2(cy - self.y, cx - self.x))
+            if abs((ang - self.angulo + 180) % 360 - 180) > self.abertura / 2:
+                return False
+
+        passos = int(dist // 12)
+        for i in range(1, passos):
+            t = i / passos
+            if self._em_parede(self.x + (cx - self.x) * t, self.y + (cy - self.y) * t):
+                return False
+        return True
+
+    def atualizar(self, jogador, esconderijos, tempo_ms):
+        dt = 16.667 if self._t is None else max(0.0, min(50.0, tempo_ms - self._t))
+        self._t = tempo_ms
+        fator = dt / 16.667
+
+        self.viu = self.enxerga(jogador, esconderijos)
+        if self.viu:
+            self._virar(self._angulo_para(jogador.get_rect().center), 9 * fator)
+            tempo_total = self.tempo_vista_agachado if jogador.agachado else self.tempo_vista_em_pe
+            self.suspeita = min(1.0, self.suspeita + dt / tempo_total)
+            return self.suspeita >= 1.0
+
+        self.suspeita = max(0.0, self.suspeita - dt / 2500)
+        self._comportamento(tempo_ms, fator)
+        return False
+
+    def _pontos_do_cone(self):
+        pontos = [(self.x, self.y)]
+        passos = 14
+        a0 = math.radians(self.angulo - self.abertura / 2)
+        a1 = math.radians(self.angulo + self.abertura / 2)
+        for i in range(passos + 1):
+            ang = a0 + (a1 - a0) * i / passos
+            c, s = math.cos(ang), math.sin(ang)
+            d = 0
+            while d < self.alcance:
+                if self._em_parede(self.x + c * (d + 12), self.y + s * (d + 12)):
+                    break
+                d += 12
+            pontos.append((self.x + c * d, self.y + s * d))
+        return pontos
+
+    def desenhar(self, surf_base, cone_surf, jogador):
+        tempo_ms = pygame.time.get_ticks()
+        cx, cy = int(self.x), int(self.y)
+
+        perto = abs(jogador.get_rect().centerx - cx) < 900
+        if perto:
+            alerta = self.viu or self.suspeita >= 0.7
+            if alerta:
+                cor_cone = (255, 50, 50, 80)
+            elif self.suspeita > 0.15 or self.estado == 'investigando':
+                cor_cone = (255, 170, 40, 65)
+            else:
+                cor_cone = (255, 255, 120, 45)
+            pygame.draw.polygon(cone_surf, cor_cone, self._pontos_do_cone())
+
+        rad = math.radians(self.angulo)
+        fx, fy = math.cos(rad), math.sin(rad)
+        pygame.draw.circle(surf_base, (22, 26, 40), (cx, cy), 23)
+        pygame.draw.circle(surf_base, (58, 70, 108), (cx, cy), 20)
+        pygame.draw.line(surf_base, (30, 34, 50), (cx - fy * 20, cy + fx * 20), (cx + fy * 20, cy - fx * 20), 5)
+        pygame.draw.circle(surf_base, (205, 175, 145), (int(cx + fx * 4), int(cy + fy * 4)), 11)
+        pygame.draw.circle(surf_base, (30, 34, 50), (int(cx + fx * 7), int(cy + fy * 7)), 11, width=3)
+        lanterna = (int(cx + fx * 30), int(cy + fy * 30))
+        pygame.draw.line(surf_base, (90, 90, 100), (cx + fx * 18, cy + fy * 18), lanterna, 4)
+        pygame.draw.circle(surf_base, (255, 240, 150), lanterna, 5)
+
+        if self.suspeita > 0.04:
+            if GuardaPrisao._fonte is None:
+                GuardaPrisao._fonte = pygame.font.SysFont(None, 30, bold=True)
+            largura = 44
+            barra = pygame.Rect(cx - largura // 2, cy - 48, largura, 6)
+            pygame.draw.rect(surf_base, (30, 30, 35), barra)
+            cor = (255, 70, 60) if self.suspeita >= 0.7 else (255, 200, 60)
+            pygame.draw.rect(surf_base, cor, (barra.x, barra.y, int(largura * self.suspeita), 6))
+            pygame.draw.rect(surf_base, (210, 210, 210), barra, width=1)
+            marca = GuardaPrisao._fonte.render("!" if self.suspeita >= 0.7 else "?", True, cor)
+            surf_base.blit(marca, marca.get_rect(midbottom=(cx, cy - 50)))
+        elif self.estado == 'investigando':
+            if GuardaPrisao._fonte is None:
+                GuardaPrisao._fonte = pygame.font.SysFont(None, 30, bold=True)
+            marca = GuardaPrisao._fonte.render("?", True, (255, 200, 60))
+            surf_base.blit(marca, marca.get_rect(midbottom=(cx, cy - 30)))

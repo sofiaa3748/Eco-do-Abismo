@@ -4,7 +4,7 @@ import math
 
 from configuracoes import LARGURA, ALTURA, AZUL_ESCURO, BRANCO, CINZA_BORDA, VERDE_GAS, VERMELHO_ALARME
 from nivel import Sala
-from personagem import Inimigo
+from personagem import Inimigo, GuardaPrisao
 from itens import gerar_frascos_na_sala, Dica, Documento, Chave, MascaraGas
 from interface_usuario import (desenhar_hud, desenhar_mensagem_contextual, desenhar_flash_detectado,
                                 desenhar_barra_oxigenio, desenhar_overlay_gas,
@@ -13,7 +13,7 @@ from configuracoes import CIANO_BRILHO
 from itens import FrascoSanidade
 from audio import AudioEspacial
 from puzzle import (CaixaArrastavel, PuzzleCaixaFerramentas, PuzzlePainelSenha, PuzzleCofre,
-                    PuzzleValvulas, PuzzleFuzil)
+                    PuzzleValvulas, PuzzleFuzil, PuzzleDisjuntores)
 
 def _transicao_padrao(contexto, jogador):
     sala = contexto["sala"]
@@ -546,17 +546,6 @@ def nivel_6(jogador, resetar_jogador=False):
     return contexto
 
 
-# =====================================================================
-# FASE 7 - ALA MÉDICA: silêncio, escuridão e alucinação sonora
-#
-# O jogador precisa achar a CHAVE DA ALA MÉDICA guiando-se só pelo
-# barulho real (um monitor que dá dois bipes, sempre no mesmo ritmo).
-# Há bipes falsos (outro tom ou ritmo, em lugares aleatórios) e vozes
-# falsas que chamam o jogador para armadilhas. A única voz confiável é
-# A VOZ de antes: grave, estável, no centro da cabeça, legenda branca.
-# =====================================================================
-
-# --- ajuste fino: mexa aqui para deixar mais fácil ou mais difícil ---
 F7_RAIO_VISAO = 120            # px de visão ao redor do jogador (curto de propósito)
 F7_ESCURIDAO_ALPHA = 250       # 255 = breu total; menos que isso deixa o cenário um pouco visível
 F7_ALCANCE_BIP_REAL = 1000     # até onde o bip real é ouvido
@@ -954,7 +943,497 @@ def nivel_7(jogador, resetar_jogador=False):
     return contexto
 
 
-# (NIVEIS foi movido para o fim do arquivo)
+# ---------------------------------------------------------------------------
+# FASE 8 — A ala das celas
+#
+# Zona A: corredor de celas com 2 guardas patrulhando. Dá para se esconder nos
+#         vãos da parede (agachado). Visto = suspeita sobe; suspeita cheia = preso.
+# Zona B: sala do guarda dormindo (porta entreaberta: só passa agachado). Cada
+#         passo faz barulho; tábuas rangem. Pegue as chaves sem acordá-lo.
+# Zona C: salão da porta de saída, com 2 guardas. Arremesse uma caneca (F) para
+#         atraí-los, abra a porta com as chaves (E) e fuja.
+# ---------------------------------------------------------------------------
+
+F8_LARGURA, F8_ALTURA = 3400, 720
+F8_FAIXA_TOPO, F8_FAIXA_BAIXO = 250, 470
+F8_VAOS_TOPO = [(440, 600), (980, 1140), (1520, 1700)]
+F8_VAOS_BAIXO = [(220, 380), (720, 880), (1260, 1420)]
+F8_X_PORTA_SALA = 1700
+F8_X_SAIDA_SALA = 2300
+F8_DIRECOES = {'direita': (1, 0), 'esquerda': (-1, 0), 'costas': (0, -1), 'frente': (0, 1)}
+
+
+def _f8_blocos(vaos, x_ini, x_fim, y0, y1):
+    blocos, x = [], x_ini
+    for a, b in vaos:
+        if a > x:
+            blocos.append(pygame.Rect(x, y0, a - x, y1 - y0))
+        x = b
+    if x < x_fim:
+        blocos.append(pygame.Rect(x, y0, x_fim - x, y1 - y0))
+    return blocos
+
+
+def _f8_desenhar_celas(surf, bloco, lado, tempo_ms, indice_bloco):
+    """Desenha as celas de um bloco: chão escuro, catre, preso (às vezes) e a grade."""
+    n = max(1, round(bloco.width / 190))
+    passo = bloco.width / n
+    for i in range(n):
+        x0 = int(bloco.x + i * passo)
+        x1 = int(bloco.x + (i + 1) * passo)
+        cela = pygame.Rect(x0, bloco.y, x1 - x0, bloco.height)
+        pygame.draw.rect(surf, (24, 26, 34), cela.inflate(-8, -8))
+        if lado == 'topo':
+            catre = pygame.Rect(x0 + 18, bloco.y + 18, 70, 34)
+            frente_y = bloco.bottom
+            grade_y0 = frente_y - 28
+        else:
+            catre = pygame.Rect(x0 + 18, bloco.bottom - 52, 70, 34)
+            frente_y = bloco.y
+            grade_y0 = frente_y
+        pygame.draw.rect(surf, (58, 52, 48), catre, border_radius=3)
+        pygame.draw.rect(surf, (30, 28, 26), catre, width=2, border_radius=3)
+
+        semente = indice_bloco * 7 + i * 3
+        if semente % 2 == 0:  # cela ocupada: silhueta com olhos que piscam
+            sx = x0 + (x1 - x0) // 2 + 20
+            sy = bloco.y + 60 if lado == 'topo' else bloco.bottom - 60
+            pygame.draw.ellipse(surf, (10, 10, 14), (sx - 18, sy - 14, 36, 30))
+            if (tempo_ms // 1800 + semente) % 6 != 0:
+                pygame.draw.circle(surf, (220, 220, 190), (sx - 6, sy - 4), 2)
+                pygame.draw.circle(surf, (220, 220, 190), (sx + 6, sy - 4), 2)
+
+        pygame.draw.rect(surf, (96, 102, 114), (x0 + 4, grade_y0, x1 - x0 - 8, 4))
+        pygame.draw.rect(surf, (96, 102, 114), (x0 + 4, grade_y0 + 24, x1 - x0 - 8, 4))
+        for bx in range(x0 + 10, x1 - 6, 14):
+            pygame.draw.line(surf, (120, 126, 140), (bx, grade_y0), (bx, grade_y0 + 28), 3)
+        pygame.draw.line(surf, (12, 14, 20), (x1 - 1, bloco.y), (x1 - 1, bloco.bottom), 3)
+
+
+def _f8_desenhar_vao(surf, rect):
+    pygame.draw.rect(surf, (9, 11, 16), rect)
+    pygame.draw.rect(surf, (4, 5, 8), rect, width=3)
+    pygame.draw.line(surf, (30, 34, 44), (rect.x + 14, rect.y + 20), (rect.right - 14, rect.y + 20), 2)
+
+
+def nivel_8(jogador, resetar_jogador=False):
+    if resetar_jogador:
+        jogador.sanidade = 100
+    jogador.agachado = False
+
+    # ---- geometria ----------------------------------------------------------
+    blocos_topo = _f8_blocos(F8_VAOS_TOPO, 40, F8_X_PORTA_SALA, 40, F8_FAIXA_TOPO)
+    blocos_baixo = _f8_blocos(F8_VAOS_BAIXO, 40, F8_X_PORTA_SALA, F8_FAIXA_BAIXO, F8_ALTURA - 40)
+
+    # parede da sala do guarda: porta entreaberta (vão de 105px; em pé o jogador tem 110px, então só passa agachado)
+    parede_sala = [pygame.Rect(F8_X_PORTA_SALA, 40, 40, 300),
+                   pygame.Rect(F8_X_PORTA_SALA, 445, 40, F8_ALTURA - 40 - 445)]
+    # saída da sala: abertura larga que dá no salão da porta
+    parede_saida = [pygame.Rect(F8_X_SAIDA_SALA, 40, 40, 260),
+                    pygame.Rect(F8_X_SAIDA_SALA, 470, 40, F8_ALTURA - 40 - 470)]
+
+    mesa = pygame.Rect(1980, 300, 170, 80)
+    estante = pygame.Rect(1800, 40, 220, 50)
+    caixas_salao = [pygame.Rect(2560, 240, 100, 100), pygame.Rect(2760, 400, 100, 100),
+                    pygame.Rect(2960, 260, 90, 90)]
+
+    obstaculos = (blocos_topo + blocos_baixo + parede_sala + parede_saida
+                  + [mesa, estante] + caixas_salao)
+
+    sala = Sala(F8_LARGURA, F8_ALTURA, ponto_entrada=(60, 295), largura_tela=LARGURA, altura_tela=ALTURA,
+                obstaculos=obstaculos, pos_porta=pygame.Rect(F8_LARGURA - 40, 280, 40, 160),
+                cor_fundo=(24, 26, 33))
+    jogador.x, jogador.y = sala.ponto_entrada
+    sala.porta_aberta = False
+    paredes = sala.paredes_colisao()
+
+    # esconderijos (agachado dentro deles, os guardas só te veem se esbarrarem em você)
+    vaos = ([pygame.Rect(a, 40, b - a, F8_FAIXA_TOPO - 40) for a, b in F8_VAOS_TOPO]
+            + [pygame.Rect(a, F8_FAIXA_BAIXO, b - a, F8_ALTURA - 40 - F8_FAIXA_BAIXO) for a, b in F8_VAOS_BAIXO])
+    sombras_salao = [pygame.Rect(2340, 40, 760, 150), pygame.Rect(2340, 530, 760, 150)]
+    esconderijos = vaos + sombras_salao
+
+    # tábuas que rangem na sala do guarda (existe um caminho sem pisar em nenhuma)
+    tabuas = [pygame.Rect(1930, 110, 90, 90), pygame.Rect(1850, 390, 80, 90),
+              pygame.Rect(2100, 150, 90, 90), pygame.Rect(2000, 430, 70, 100),
+              pygame.Rect(2090, 400, 60, 90), pygame.Rect(1870, 510, 80, 80)]
+
+    ponto_guarda_dormindo = (2045, 268)
+    chave = Chave(2005, 322, rotulo="Chaves das celas")
+    canecas_prateleira = pygame.Rect(1870, 92, 40, 16)
+
+    guardas = [
+        GuardaPrisao(380, 360, rota=[(380, 360), (1050, 360)], angulo=0, velocidade=1.3,
+                     alcance=330, abertura=56, pausa_ms=1600),
+        GuardaPrisao(1640, 360, rota=[(1640, 360), (1190, 360)], angulo=180, velocidade=1.3,
+                     alcance=330, abertura=56, pausa_ms=1600),
+        GuardaPrisao(3230, 275, angulo=180, varredura=22, alcance=380, abertura=62),
+        GuardaPrisao(3230, 445, angulo=180, varredura=22, alcance=380, abertura=62),
+    ]
+    for g in guardas:
+        g.definir_mundo(paredes)
+
+    frascos = [FrascoSanidade(500, 100), FrascoSanidade(1060, 600), FrascoSanidade(2420, 90)]
+
+    sussurros = [
+        (260, 'PRESO: "Psiu... eles dão meia-volta nas pontas."'),
+        (760, 'PRESO: "Nos vãos da parede ninguém te vê. Agachado."'),
+        (1330, 'PRESO: "O guarda do fim dorme... e as tábuas rangem."'),
+    ]
+
+    glow = pygame.Surface((220, 220), pygame.SRCALPHA)
+    for r in range(110, 0, -10):
+        pygame.draw.circle(glow, (255, 235, 170, int(46 * (1 - r / 110))), (110, 110), r)
+    sombra_surfs = {}
+    for s in sombras_salao:
+        sf = pygame.Surface(s.size, pygame.SRCALPHA)
+        sf.fill((0, 0, 14, 120))
+        sombra_surfs[(s.x, s.y)] = sf
+
+    ponto_inicio = sala.ponto_entrada
+    ponto_sala_guarda = (1760, 290)
+    ponto_salao = (2360, 305)
+
+    contexto = _estado_base(
+        sala, 8,
+        frascos=frascos,
+        guardas=guardas,
+        taxa_dano_sanidade=0.004,
+        mensagem_intro='A VOZ: "É por aqui que você deve passar. Sem ser visto."',
+        duracao_intro=5500,
+        condicao_transicao=lambda contexto, jogador: False,
+    )
+
+    e = {
+        "tem_chave": False,
+        "canecas": 0,
+        "canecas_pegas": False,
+        "ruido": 0.0,
+        "agitado": False,
+        "tabua_ativa": False,
+        "escondido": False,
+        "preso_ate": 0,
+        "preso_inicio": 0,
+        "preso_motivo": "",
+        "pos_preso": (0, 0),
+        "checkpoint": ponto_inicio,
+        "arremesso": None,
+        "ondas": [],
+        "sussurros_dados": set(),
+        "aviso_porta": False,
+        "ultimo_tempo": pygame.time.get_ticks(),
+    }
+    contexto["e8"] = e
+
+    def perto(jogador, rect, folga):
+        return jogador.get_rect().colliderect(rect.inflate(folga, folga))
+
+    def ponto_em_parede(px, py):
+        return pygame.Rect(int(px), int(py), 1, 1).collidelist(paredes) != -1
+
+    jogador_ref = [jogador]
+
+    def prender(tempo_ms, motivo):
+        e["preso_inicio"] = tempo_ms
+        e["preso_ate"] = tempo_ms + 3200
+        e["preso_motivo"] = motivo
+        e["pos_preso"] = (jogador_ref[0].x, jogador_ref[0].y)
+
+    def reaparecer(tempo_ms):
+        j = jogador_ref[0]
+        e["preso_ate"] = 0
+        j.x, j.y = e["checkpoint"]
+        j.agachado = False
+        j.andando = False
+        for g in guardas:
+            g.reiniciar()
+        e["ruido"] = 0.0
+        e["agitado"] = False
+        e["arremesso"] = None
+        if e["canecas_pegas"]:
+            e["canecas"] = 2
+        j.dano_sanidade(8)
+        _definir_mensagem(contexto, "Você foi solto na última área segura. Tente de novo.", tempo_ms, 3000)
+
+    def ao_tecla_down(contexto, jogador, evento):
+        jogador_ref[0] = jogador
+        agora = pygame.time.get_ticks()
+        if e["preso_ate"]:
+            return
+
+        if evento.key == pygame.K_q and not jogador.agachado:
+            # acabou de levantar: se não houver espaço (teto baixo, porta), volta a ficar agachado
+            if jogador.get_rect().collidelist(paredes) != -1:
+                jogador.agachado = True
+                _definir_mensagem(contexto, "Não há espaço para levantar aqui.", agora, 1800)
+
+        if evento.key == pygame.K_f:
+            if e["canecas"] <= 0 or e["arremesso"]:
+                if not e["canecas_pegas"]:
+                    _definir_mensagem(contexto, "Você não tem nada para arremessar.", agora, 1800)
+                return
+            origem = jogador.get_rect().center
+            vx, vy = F8_DIRECOES[jogador.direcao]
+            dist = 0
+            while dist < 380 and not ponto_em_parede(origem[0] + vx * (dist + 10), origem[1] + vy * (dist + 10)):
+                dist += 10
+            if dist < 60:
+                _definir_mensagem(contexto, "Não há espaço para arremessar nessa direção.", agora, 1800)
+                return
+            e["canecas"] -= 1
+            e["arremesso"] = {"origem": origem,
+                              "destino": (origem[0] + vx * dist, origem[1] + vy * dist),
+                              "t0": agora, "dur": 550}
+
+    def ao_interagir(contexto, jogador):
+        jogador_ref[0] = jogador
+        agora = pygame.time.get_ticks()
+        if e["preso_ate"]:
+            return
+
+        if not e["tem_chave"] and perto(jogador, chave.rect, 120):
+            chave.coletada = True
+            e["tem_chave"] = True
+            e["ruido"] += 45 if not jogador.agachado else 22
+            _definir_mensagem(contexto, "Você pegou as chaves. Agora saia sem fazer barulho.", agora, 3500)
+        elif not e["canecas_pegas"] and perto(jogador, canecas_prateleira, 70):
+            e["canecas_pegas"] = True
+            e["canecas"] = 2
+            _definir_mensagem(contexto, "Você pegou 2 canecas de metal. [F] arremessa.", agora, 3500)
+        elif perto(jogador, sala.rect_porta, 90):
+            if sala.porta_aberta:
+                return
+            if e["tem_chave"]:
+                sala.porta_aberta = True
+                _definir_mensagem(contexto, "A porta se abre. Corra!", agora, 3000)
+            else:
+                _definir_mensagem(contexto, "Trancada. Você precisa das chaves do guarda.", agora, 2500)
+
+    def atualizar_ruido(jogador, agora, f):
+        dist = math.hypot(jogador.get_rect().centerx - ponto_guarda_dormindo[0],
+                          jogador.get_rect().centery - ponto_guarda_dormindo[1])
+        fator_dist = max(0.0, min(1.0, 1.0 - (dist - 250) / 450))
+        pe = (jogador.get_rect().centerx, jogador.get_rect().bottom - 10)
+        em_tabua = any(t.collidepoint(pe) for t in tabuas)
+
+        if jogador.andando:
+            e["ruido"] += (0.09 if jogador.agachado else 0.75) * fator_dist * f
+            if em_tabua:
+                if not e["tabua_ativa"]:
+                    e["ruido"] += 28
+                    _definir_mensagem(contexto, "A tábua range!", agora, 1500)
+                e["ruido"] += 0.35 * f
+            e["ruido"] -= 0.03 * f
+        else:
+            e["ruido"] -= 0.20 * f
+        e["tabua_ativa"] = em_tabua and jogador.andando
+        e["ruido"] = max(0.0, e["ruido"])
+
+        if e["ruido"] >= 100:
+            return True
+        if e["ruido"] >= 50 and not e["agitado"]:
+            e["agitado"] = True
+            _definir_mensagem(contexto, "O guarda se mexeu na cadeira...", agora, 2200)
+        elif e["ruido"] < 25:
+            e["agitado"] = False
+        return False
+
+    def ao_atualizar(contexto, jogador, teclas, tempo_ms):
+        jogador_ref[0] = jogador
+        f = max(0.0, min(3.0, (tempo_ms - e["ultimo_tempo"]) / 16.667))
+        e["ultimo_tempo"] = tempo_ms
+
+        # preso: fica parado até o tempo acabar e volta ao último ponto seguro
+        if e["preso_ate"]:
+            jogador.x, jogador.y = e["pos_preso"]
+            jogador.andando = False
+            if tempo_ms >= e["preso_ate"]:
+                reaparecer(tempo_ms)
+            return
+
+        rect = jogador.get_rect()
+        cx, cy = rect.center
+        e["escondido"] = jogador.agachado and any(v.collidepoint(cx, cy) for v in esconderijos)
+
+        # checkpoints
+        if e["tem_chave"] and jogador.x > F8_X_SAIDA_SALA + 40:
+            e["checkpoint"] = ponto_salao
+        elif jogador.x > F8_X_PORTA_SALA + 50 and not e["tem_chave"] and e["checkpoint"] == ponto_inicio:
+            e["checkpoint"] = ponto_sala_guarda
+
+        # dicas das celas / porta entreaberta
+        for i, (sx, texto) in enumerate(sussurros):
+            if i not in e["sussurros_dados"] and abs(cx - sx) < 220 and jogador.x < F8_X_PORTA_SALA:
+                e["sussurros_dados"].add(i)
+                _definir_mensagem(contexto, texto, tempo_ms, 3800)
+        if not e["aviso_porta"] and jogador.x > F8_X_PORTA_SALA - 380:
+            e["aviso_porta"] = True
+            _definir_mensagem(contexto, "A porta está entreaberta. Só passa agachado (Q).", tempo_ms, 3500)
+
+        # guardas
+        for g in guardas:
+            if g.atualizar(jogador, esconderijos, tempo_ms):
+                prender(tempo_ms, "Um guarda te viu!")
+                return
+
+        # caneca no ar
+        arr = e["arremesso"]
+        if arr and tempo_ms >= arr["t0"] + arr["dur"]:
+            destino = arr["destino"]
+            e["ondas"].append({"pos": destino, "t0": tempo_ms})
+            ouviram = sum(1 for g in guardas if g.ouvir(destino, tempo_ms))
+            if math.hypot(destino[0] - ponto_guarda_dormindo[0], destino[1] - ponto_guarda_dormindo[1]) < 520:
+                e["ruido"] += 100
+            _definir_mensagem(contexto, "CLANG! Os guardas foram ver o que foi." if ouviram else "CLANG!",
+                              tempo_ms, 3000)
+            e["arremesso"] = None
+        e["ondas"] = [w for w in e["ondas"] if tempo_ms - w["t0"] < 800]
+
+        # guarda dormindo
+        if atualizar_ruido(jogador, tempo_ms, f):
+            prender(tempo_ms, "O guarda acordou!")
+            return
+
+        if sala.porta_aberta and sala.jogador_na_porta(jogador):
+            contexto["final"] = True
+
+    def ao_desenhar_extra(contexto, surf, jogador, fonte, tempo_ms):
+        # piso da sala do guarda e do salão
+        pygame.draw.rect(surf, (40, 34, 29), (F8_X_PORTA_SALA + 40, 40, F8_X_SAIDA_SALA - F8_X_PORTA_SALA - 40, F8_ALTURA - 80))
+        for yy in range(60, F8_ALTURA - 40, 40):
+            pygame.draw.line(surf, (32, 27, 23), (F8_X_PORTA_SALA + 40, yy), (F8_X_SAIDA_SALA, yy), 1)
+        pygame.draw.rect(surf, (28, 30, 38), (F8_X_SAIDA_SALA + 40, 40, F8_LARGURA - F8_X_SAIDA_SALA - 80, F8_ALTURA - 80))
+        for xx in range(F8_X_SAIDA_SALA + 80, F8_LARGURA - 40, 80):
+            pygame.draw.line(surf, (24, 26, 33), (xx, 40), (xx, F8_ALTURA - 40), 1)
+
+        # celas, vãos, lâmpadas
+        for i, b in enumerate(blocos_topo):
+            _f8_desenhar_celas(surf, b, 'topo', tempo_ms, i)
+        for i, b in enumerate(blocos_baixo):
+            _f8_desenhar_celas(surf, b, 'baixo', tempo_ms, i + 10)
+        for v in vaos:
+            _f8_desenhar_vao(surf, v)
+        for lx in (180, 560, 940, 1320):
+            if not (lx == 940 and (tempo_ms // 140) % 9 == 0):
+                surf.blit(glow, (lx - 110, 360 - 110))
+
+        # porta entreaberta da sala do guarda
+        pygame.draw.line(surf, (110, 80, 50), (F8_X_PORTA_SALA + 20, 340), (F8_X_PORTA_SALA + 66, 296), 8)
+        pygame.draw.line(surf, (60, 40, 25), (F8_X_PORTA_SALA + 20, 340), (F8_X_PORTA_SALA + 66, 296), 2)
+
+        # tábuas que rangem (um pouco mais claras que o piso)
+        for t in tabuas:
+            pygame.draw.rect(surf, (74, 58, 42), t)
+            for k in range(t.x + 18, t.right, 18):
+                pygame.draw.line(surf, (52, 40, 30), (k, t.y), (k, t.bottom), 1)
+            pygame.draw.rect(surf, (96, 76, 54), t, width=2)
+
+        # prateleira com canecas
+        pygame.draw.rect(surf, (80, 66, 50), estante)
+        pygame.draw.rect(surf, (40, 32, 24), estante, width=2)
+        if not e["canecas_pegas"]:
+            for k in range(2):
+                pygame.draw.rect(surf, (170, 175, 185), (canecas_prateleira.x + 4 + k * 20, canecas_prateleira.y, 12, 14), border_radius=3)
+
+        # mesa, cadeira, guarda dormindo e chaves
+        pygame.draw.rect(surf, (96, 70, 46), mesa, border_radius=4)
+        pygame.draw.rect(surf, (50, 34, 22), mesa, width=3, border_radius=4)
+        pygame.draw.rect(surf, (60, 50, 44), (ponto_guarda_dormindo[0] - 30, 236, 60, 46), border_radius=6)
+        gx, gy = ponto_guarda_dormindo
+        agitado = e["agitado"]
+        respira = int(2 * math.sin(tempo_ms / (350 if agitado else 900)))
+        pygame.draw.ellipse(surf, (22, 26, 40), (gx - 34, gy - 18 + respira, 68, 40))
+        pygame.draw.ellipse(surf, (58, 70, 108), (gx - 30, gy - 15 + respira, 60, 32))
+        pygame.draw.circle(surf, (205, 175, 145), (gx + 4, gy + 22), 12)
+        pygame.draw.circle(surf, (30, 34, 50), (gx + 4, gy + 22), 12, width=3)
+        if not chave.coletada:
+            chave.desenhar(surf)
+        texto_z = fonte.render("!" if agitado else "Z z z", True, (255, 200, 80) if agitado else (150, 160, 200))
+        surf.blit(texto_z, (gx + 26, gy - 52 - int(6 * math.sin(tempo_ms / 500))))
+
+        # caixas do salão e sombras (esconderijos)
+        for c in caixas_salao:
+            pygame.draw.rect(surf, (105, 70, 45), c, border_radius=4)
+            pygame.draw.rect(surf, (50, 30, 20), c, width=3, border_radius=4)
+            pygame.draw.line(surf, (60, 38, 24), c.topleft, c.bottomright, 2)
+            pygame.draw.line(surf, (60, 38, 24), c.topright, c.bottomleft, 2)
+        for s in sombras_salao:
+            surf.blit(sombra_surfs[(s.x, s.y)], s.topleft)
+
+        # caneca voando e ondas de som
+        arr = e["arremesso"]
+        if arr:
+            t = min(1.0, (tempo_ms - arr["t0"]) / arr["dur"])
+            ox, oy = arr["origem"]
+            dx_, dy_ = arr["destino"]
+            px, py = ox + (dx_ - ox) * t, oy + (dy_ - oy) * t
+            altura = 40 * math.sin(math.pi * t)
+            pygame.draw.circle(surf, (20, 20, 25), (int(px), int(py)), 5)
+            pygame.draw.circle(surf, (190, 195, 205), (int(px), int(py - altura)), 6)
+        for w in e["ondas"]:
+            prog = (tempo_ms - w["t0"]) / 800
+            pygame.draw.circle(surf, (230, 230, 120), (int(w["pos"][0]), int(w["pos"][1])), int(20 + 150 * prog), width=3)
+
+
+    def ao_desenhar_tela(contexto, tela, jogador, fonte, tempo_ms):
+        if e["tem_chave"] and sala.porta_aberta:
+            objetivo = "Fuja pela porta!"
+        elif e["tem_chave"]:
+            objetivo = "Distraia os guardas e abra a porta (E)"
+        elif jogador.x >= F8_X_PORTA_SALA:
+            objetivo = "Pegue as chaves sem acordar o guarda"
+        else:
+            objetivo = "Passe pela ala das celas sem ser visto"
+        tela.blit(fonte.render(f"OBJETIVO: {objetivo}", True, (210, 220, 255)), (20, 124))
+        extra = "Q: agachar   E: interagir"
+        if e["canecas"] > 0:
+            extra += f"   F: arremessar caneca ({e['canecas']})"
+        tela.blit(fonte.render(extra, True, (140, 150, 175)), (20, 146))
+
+        if e["escondido"]:
+            tela.blit(fonte.render("ESCONDIDO", True, (120, 230, 160)), (20, 168))
+
+        # medidor de ruído (aparece perto do guarda dormindo)
+        if (F8_X_PORTA_SALA <= jogador.x <= F8_X_SAIDA_SALA + 40 and not e["tem_chave"]) or e["ruido"] > 1:
+            y = 192
+            pygame.draw.rect(tela, (40, 40, 45), (20, y, 200, 12), border_radius=3)
+            cor = (255, 90, 60) if e["ruido"] >= 50 else (255, 200, 60)
+            if e["ruido"] > 0:
+                pygame.draw.rect(tela, cor, (20, y, int(min(100, e["ruido"]) * 2), 12), border_radius=3)
+            pygame.draw.rect(tela, (200, 200, 200), (20, y, 200, 12), 2, border_radius=3)
+            tela.blit(fonte.render("RUÍDO", True, (255, 255, 255)), (228, y - 4))
+
+        # tela de "preso"
+        if e["preso_ate"]:
+            decorrido = tempo_ms - e["preso_inicio"]
+            total = e["preso_ate"] - e["preso_inicio"]
+            veu = pygame.Surface((LARGURA, ALTURA), pygame.SRCALPHA)
+            veu.fill((120, 10, 10, min(150, int(decorrido / 3))))
+            tela.blit(veu, (0, 0))
+            deslocamento = min(1.0, decorrido / 350)
+            for bx in range(0, LARGURA, 64):
+                altura_barra = int(ALTURA * deslocamento)
+                pygame.draw.rect(tela, (18, 18, 22), (bx + 24, 0, 16, altura_barra))
+                pygame.draw.rect(tela, (90, 95, 108), (bx + 24, 0, 16, altura_barra), width=2)
+            if decorrido > 350:
+                titulo = fonte.render("PRESO!", True, (255, 80, 70))
+                tela.blit(titulo, titulo.get_rect(center=(LARGURA // 2, ALTURA // 2 - 20)))
+                motivo = fonte.render(e["preso_motivo"], True, (230, 230, 230))
+                tela.blit(motivo, motivo.get_rect(center=(LARGURA // 2, ALTURA // 2 + 14)))
+            restante = e["preso_ate"] - tempo_ms
+            if restante < 450:
+                fade = pygame.Surface((LARGURA, ALTURA))
+                fade.fill((0, 0, 0))
+                fade.set_alpha(int(255 * (1 - restante / 450)))
+                tela.blit(fade, (0, 0))
+
+    contexto["ao_atualizar"] = ao_atualizar
+    contexto["ao_interagir"] = ao_interagir
+    contexto["ao_tecla_down"] = ao_tecla_down
+    contexto["ao_desenhar_extra"] = ao_desenhar_extra
+    contexto["ao_desenhar_tela"] = ao_desenhar_tela
+    return contexto
+
 
 def nivel_9(jogador, reset=True):
     if reset:
@@ -1661,7 +2140,7 @@ def nivel_12(jogador, reset=True):
 
 
 NIVEIS = {
-    1: nivel_1, 2: nivel_2, 3: nivel_3, 4: nivel_4, 5: nivel_5, 6: nivel_6, 7: nivel_7, 9: nivel_9, 10: nivel_10, 11: nivel_11, 12: nivel_12
+    1: nivel_1, 2: nivel_2, 3: nivel_3, 4: nivel_4, 5: nivel_5, 6: nivel_6, 7: nivel_7, 8: nivel_8, 9: nivel_9, 10: nivel_10, 11: nivel_11, 12: nivel_12
 }
 
 def iniciar_sala(jogador, nivel, resetar_jogador=False):
@@ -1765,6 +2244,10 @@ def renderizar_jogo(tela, jogador, contexto, offset_x, offset_y, flash_ativo,
     msg = contexto.get("mensagem_temporaria")
     if msg and tempo_ms < contexto.get("mensagem_temporaria_expira", 0):
         desenhar_mensagem_contextual(tela, msg, LARGURA, ALTURA, fonte_sub, y=ALTURA - 40)
+
+    hook_tela = contexto.get("ao_desenhar_tela")
+    if hook_tela:
+        hook_tela(contexto, tela, jogador, fonte_sub, tempo_ms)
 
     puzzle_modal = contexto.get("puzzle_modal")
     if puzzle_modal and getattr(puzzle_modal, "ativo", False):
