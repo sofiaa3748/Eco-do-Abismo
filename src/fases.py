@@ -2150,3 +2150,120 @@ def nivel_12(jogador, resetar_jogador=False):
     contexto["texto_status"] = status
 
     return contexto
+
+NIVEIS = {
+    1: nivel_1, 2: nivel_2, 3: nivel_3, 4: nivel_4, 5: nivel_5, 6: nivel_6, 7: nivel_7, 8: nivel_8, 9: nivel_9, 10: nivel_10, 11: nivel_11, 12: nivel_12
+}
+
+def iniciar_sala(jogador, nivel, resetar_jogador=False):
+    fn = NIVEIS.get(nivel, nivel_1)
+    contexto = fn(jogador, resetar_jogador=resetar_jogador)
+    contexto["tempo_inicio"] = pygame.time.get_ticks()
+    return contexto
+
+
+def renderizar_jogo(tela, jogador, contexto, offset_x, offset_y, flash_ativo,
+                     fonte_sub, sprites_jogador=None):
+    sala = contexto["sala"]
+    tempo_ms = pygame.time.get_ticks()
+
+    superficie_mundo = pygame.Surface((sala.largura, sala.altura))
+    superficie_mundo.fill(AZUL_ESCURO)
+    cone_surf = pygame.Surface((sala.largura, sala.altura), pygame.SRCALPHA)
+
+    sala.desenhar(superficie_mundo)
+
+    for f in contexto["frascos"]:
+        f.desenhar(superficie_mundo)
+
+    for obj in contexto["objetos"]:
+        obj.desenhar(superficie_mundo)
+
+    duto = contexto["duto"]
+    if duto:
+        pygame.draw.rect(superficie_mundo, (50, 50, 55), duto["corredor"])
+        pygame.draw.rect(superficie_mundo, (80, 80, 85), duto["corredor"], width=2)
+        if not duto["porta_entrada_aberta"]:
+            pygame.draw.rect(superficie_mundo, (140, 140, 150), duto["rect_entrada"])
+        if not duto["porta_saida_aberta"]:
+            pygame.draw.rect(superficie_mundo, (140, 140, 150), duto["rect_saida"])
+
+    caixa_ferramentas = contexto.get("caixa_ferramentas")
+    if caixa_ferramentas:
+        coberta = any(c.rect.colliderect(caixa_ferramentas) for c in contexto["caixas"])
+        if not coberta:
+            pygame.draw.rect(superficie_mundo, (150, 35, 35), caixa_ferramentas, border_radius=3)
+            pygame.draw.rect(superficie_mundo, (220, 200, 50), (caixa_ferramentas.x + 10, caixa_ferramentas.y, 10, 4))
+
+    for cx in contexto["caixas"]:
+        cx.desenhar(superficie_mundo)
+
+    if contexto.get("ao_desenhar_extra"):
+        contexto["ao_desenhar_extra"](contexto, superficie_mundo, jogador, fonte_sub, tempo_ms)
+
+    for camera in contexto["cameras"]:
+        camera.atualizar()
+        camera.desenhar(superficie_mundo, cone_surf, jogador)
+
+    for guarda in contexto["guardas"]:
+        guarda.desenhar(superficie_mundo, cone_surf, jogador)
+
+    isca = contexto.get("isca")
+    if isca and not isca["usada"]:
+        pygame.draw.circle(superficie_mundo, (200, 180, 90), isca["rect"].center, 9)
+
+    superficie_mundo.blit(cone_surf, (0, 0))
+
+    if sprites_jogador:
+        jogador.desenhar(superficie_mundo, sprites_jogador)
+    else:
+        cor_player = (180, 220, 255) if getattr(jogador, 'agachado', False) else BRANCO
+        pygame.draw.rect(superficie_mundo, cor_player, jogador.get_rect(), border_radius=4)
+
+    cam_x, cam_y = sala.calcular_camera(jogador)
+    area_visivel = pygame.Rect(cam_x, cam_y, sala.largura_tela, sala.altura_tela)
+    tela.blit(superficie_mundo, (offset_x, offset_y), area=area_visivel)
+
+    desenhar_hud(tela, jogador, fonte_sub)
+
+    y_status = 100
+    if contexto.get("usa_oxigenio"):
+        desenhar_barra_oxigenio(tela, jogador, fonte_sub)
+        y_status = 175
+
+    texto_status_fn = contexto.get("texto_status")
+    if texto_status_fn:
+        linha = texto_status_fn(contexto)
+        if linha:
+            txt = fonte_sub.render(linha, True, (210, 220, 255))
+            tela.blit(txt, (20, y_status))
+
+    texto_nivel = fonte_sub.render(f"SALA {contexto['nivel']}", True, CINZA_BORDA)
+    tela.blit(texto_nivel, (LARGURA - texto_nivel.get_width() - 20, 20))
+
+    if contexto.get("tint_gas"):
+        desenhar_overlay_gas(tela, LARGURA, ALTURA, intensidade=70)
+
+    if contexto.get("usa_lanterna"):
+        pos_tela = (jogador.get_rect().centerx - cam_x + offset_x, jogador.get_rect().centery - cam_y + offset_y)
+        desenhar_escuridao_com_lanterna(tela, pos_tela, LARGURA, ALTURA,
+                                         ligada=getattr(jogador, "lanterna_ligada", False))
+
+    intro = contexto.get("mensagem_intro")
+    if intro and tempo_ms - contexto["tempo_inicio"] < contexto.get("duracao_intro", 4500):
+        desenhar_mensagem_contextual(tela, intro, LARGURA, ALTURA, fonte_sub, y=ALTURA - 70)
+
+    msg = contexto.get("mensagem_temporaria")
+    if msg and tempo_ms < contexto.get("mensagem_temporaria_expira", 0):
+        desenhar_mensagem_contextual(tela, msg, LARGURA, ALTURA, fonte_sub, y=ALTURA - 40)
+
+    hook_tela = contexto.get("ao_desenhar_tela")
+    if hook_tela:
+        hook_tela(contexto, tela, jogador, fonte_sub, tempo_ms)
+
+    puzzle_modal = contexto.get("puzzle_modal")
+    if puzzle_modal and getattr(puzzle_modal, "ativo", False):
+        puzzle_modal.desenhar(tela, fonte_sub)
+
+    if flash_ativo:
+        desenhar_flash_detectado(tela, LARGURA, ALTURA)
