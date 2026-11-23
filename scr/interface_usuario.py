@@ -21,18 +21,50 @@ def desenhar_hud(tela, jogador, fonte):
         txt_agachado = fonte.render("ESTADO: Agachado (Furtivo)", True, (200, 200, 200))
         tela.blit(txt_agachado, (20, 100))
 
+def _quebrar_linhas(texto, fonte, largura_maxima):
+    """Quebra mensagens em linhas sem ultrapassar a largura disponível."""
+    palavras = str(texto).split()
+    linhas, atual = [], ""
+    for palavra in palavras:
+        teste = palavra if not atual else atual + " " + palavra
+        if fonte.size(teste)[0] <= largura_maxima:
+            atual = teste
+        else:
+            if atual:
+                linhas.append(atual)
+            # Divide palavras excepcionalmente longas para evitar corte.
+            parte = ""
+            for caractere in palavra:
+                if fonte.size(parte + caractere)[0] > largura_maxima and parte:
+                    linhas.append(parte)
+                    parte = caractere
+                else:
+                    parte += caractere
+            atual = parte
+    if atual:
+        linhas.append(atual)
+    return linhas or [""]
+
+
 def desenhar_mensagem_contextual(tela, texto, largura, altura, fonte, y=None):
     if y is None:
         y = altura - 60
-
-    txt = fonte.render(texto, True, (255, 255, 200))
-    rect = txt.get_rect(center=(largura // 2, y))
-
-    fundo = pygame.Rect(rect.x - 15, rect.y - 8, rect.width + 30, rect.height + 16)
-    pygame.draw.rect(tela, (15, 15, 20, 230), fundo, border_radius=6)
+    margem = 34
+    largura_caixa = min(largura - 2 * margem, 760)
+    linhas = _quebrar_linhas(texto, fonte, largura_caixa - 30)
+    altura_linha = fonte.get_linesize() + 4
+    altura_caixa = len(linhas) * altura_linha + 20
+    centro_y = max(altura_caixa // 2 + 8, min(altura - altura_caixa // 2 - 8, y))
+    fundo = pygame.Rect((largura - largura_caixa) // 2, centro_y - altura_caixa // 2,
+                        largura_caixa, altura_caixa)
+    camada = pygame.Surface((fundo.width, fundo.height), pygame.SRCALPHA)
+    camada.fill((15, 15, 20, 232))
+    tela.blit(camada, fundo.topleft)
     pygame.draw.rect(tela, (100, 100, 110), fundo, width=2, border_radius=6)
-
-    tela.blit(txt, rect)
+    for i, linha in enumerate(linhas):
+        txt = fonte.render(linha, True, (255, 255, 200))
+        tela.blit(txt, txt.get_rect(center=(fundo.centerx,
+                    fundo.y + 10 + altura_linha * i + altura_linha // 2)))
 
 def desenhar_flash_detectado(tela, largura, altura):
     flash = pygame.Surface((largura, altura), pygame.SRCALPHA)
