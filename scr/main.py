@@ -14,6 +14,104 @@ def _coletados(contexto):
     return {id(o): o for o in itens if getattr(o, "coletado", False) or getattr(o, "coletada", False)}
 
 
+
+def _linhas_quebradas(texto, largura_max=42):
+    palavras = texto.split()
+    linhas, atual = [], ""
+    for p in palavras:
+        teste = (atual + " " + p).strip()
+        if len(teste) <= largura_max:
+            atual = teste
+        else:
+            if atual:
+                linhas.append(atual)
+            atual = p
+    if atual:
+        linhas.append(atual)
+    return linhas
+
+
+def desenhar_epilogo_varanda(tela, decorrido, fonte):
+    """Sequencia visual mais longa: saida, varanda, revelacao, inclinacao e fade."""
+    w, h = tela.get_size()
+    tela.fill((7, 12, 20))
+    # Ceu e horizonte artificial
+    for i in range(12):
+        cor = (10 + i * 2, 18 + i * 3, 30 + i * 4)
+        pygame.draw.rect(tela, cor, (0, int(i * h * 0.05), w, int(h * 0.06) + 2))
+    for i in range(13):
+        x = int(i * w / 12) - 30
+        altura = 145 + (i * 37) % 115
+        pygame.draw.rect(tela, (19 + i % 3 * 6, 28 + i % 4 * 4, 42), (x, h // 2 - altura // 2, 95, altura + 130))
+        for yy in range(h // 2 - altura // 2 + 18, h // 2 + 86, 34):
+            cor_jan = (84, 114, 130) if (i + yy // 34) % 4 else (146, 100, 68)
+            pygame.draw.rect(tela, cor_jan, (x + 14, yy, 16, 20))
+            pygame.draw.rect(tela, (10, 17, 26), (x + 14, yy, 16, 20), 2)
+    pygame.draw.rect(tela, (36, 43, 52), (0, int(h * .71), w, int(h * .29)))
+    for y in range(int(h * .71), h, 34):
+        pygame.draw.line(tela, (57, 63, 69), (0, y), (w, y), 1)
+    if decorrido > 1300:
+        for x in range(45, w, 110):
+            pygame.draw.rect(tela, (73, 81, 89), (x, int(h * .63), 9, int(h * .17)))
+        pygame.draw.rect(tela, (108, 113, 118), (0, int(h * .63), w, 12))
+        pygame.draw.line(tela, (179, 166, 140), (0, int(h * .63)), (w, int(h * .63)), 2)
+    # personagem andando e depois se inclinando na sacada
+    base_x = int(w * .27 + min(1, decorrido / 2800) * w * .24)
+    y = int(h * .72)
+    inclinando = decorrido > 8600
+    lean = min(1.0, max(0.0, (decorrido - 8600) / 1700.0)) if inclinando else 0.0
+    dx_lead = int(18 * lean)
+    dy_lead = int(7 * lean)
+    pygame.draw.ellipse(tela, (5, 9, 13), (base_x - 32, y - 9, 64, 18))
+    quadril_esq = (base_x - 11, y - 5)
+    quadril_dir = (base_x + 11, y - 5)
+    ombro_esq = (base_x - 14 + dx_lead, y - 53 + dy_lead)
+    ombro_dir = (base_x + 14 + dx_lead, y - 53 + dy_lead)
+    cabeca = (base_x + dx_lead, y - 125 + dy_lead)
+    pygame.draw.line(tela, (18, 24, 30), quadril_esq, ombro_esq, 12)
+    pygame.draw.line(tela, (18, 24, 30), quadril_dir, ombro_dir, 12)
+    pygame.draw.polygon(tela, (34, 43, 49), [
+        (base_x - 25 + dx_lead, y - 108 + dy_lead),
+        (base_x + 25 + dx_lead, y - 108 + dy_lead),
+        (base_x + 19 + dx_lead, y - 48 + dy_lead),
+        (base_x - 19 + dx_lead, y - 48 + dy_lead),
+    ])
+    pygame.draw.circle(tela, (41, 45, 48), cabeca, 19)
+    pygame.draw.line(tela, (29, 37, 43), (base_x - 21 + dx_lead, y - 96 + dy_lead), (base_x - 31 + dx_lead, y - 54 + dy_lead), 11)
+    pygame.draw.line(tela, (29, 37, 43), (base_x + 21 + dx_lead, y - 96 + dy_lead), (base_x + 31 + dx_lead + int(6 * lean), y - 54 + dy_lead + int(4 * lean)), 11)
+    if inclinando:
+        pygame.draw.line(tela, (25, 31, 37), (base_x + 4, y - 34), (base_x + 34, y - 42), 2)
+
+    if decorrido < 1800:
+        blocos = ["A porta estava aberta."]
+    elif decorrido < 4200:
+        blocos = ["Do lado de fora, o mesmo lugar.", "A mesma arquitetura. As mesmas janelas."]
+    elif decorrido < 7000:
+        blocos = ["A cidade nao existe.", "So ha repeticoes do hospital montadas como um cenario."]
+    elif decorrido < 9800:
+        blocos = ["PACIENTE 724. RETORNE AO QUARTO.", "A voz nao vinha de fora. Nunca veio."]
+    else:
+        blocos = ["Nao havia saida.", "So uma verdade tarde demais."]
+    painel = pygame.Surface((w - 120, 110), pygame.SRCALPHA)
+    painel.fill((0, 0, 0, 110))
+    tela.blit(painel, (60, 28))
+    yy = 58
+    for linha in blocos:
+        for sub in _linhas_quebradas(linha, 44):
+            img = fonte.render(sub, True, (225, 215, 190))
+            tela.blit(img, img.get_rect(center=(w // 2, yy)))
+            yy += 26
+
+    # brilho de revelacao e distorcao leve
+    if decorrido > 5200 and (decorrido // 140) % 3 == 0:
+        for x in range(0, w, 12):
+            pygame.draw.line(tela, (255, 255, 255, 20), (x, 0), (x + 10, h), 1)
+    if decorrido > 9800:
+        overlay = pygame.Surface((w, h), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, min(255, int((decorrido - 9800) / 3000 * 255))))
+        tela.blit(overlay, (0, 0))
+
+
 def main():
     pygame.init()
     tela = pygame.display.set_mode((LARGURA, ALTURA))
@@ -90,6 +188,10 @@ def main():
                         estado = "JOGANDO"
 
             elif estado == "JOGANDO":
+                if modal_ativo and evento.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION):
+                    if hasattr(puzzle_modal, "processar_evento"):
+                        puzzle_modal.processar_evento(evento)
+
                 if evento.type == pygame.KEYDOWN:
                     if evento.key == pygame.K_ESCAPE:
                         if modal_ativo:
@@ -97,7 +199,9 @@ def main():
                         else:
                             estado = "MENU"
 
-                    if evento.key == pygame.K_SPACE and modal_ativo:
+                    if modal_ativo and hasattr(puzzle_modal, "processar_evento"):
+                        puzzle_modal.processar_evento(evento)
+                    elif evento.key == pygame.K_SPACE and modal_ativo:
                         puzzle_modal.atualizar(teclas)
                         sons.tocar("golpe", 0.5)
 
@@ -243,6 +347,7 @@ def main():
                         contexto = iniciar_sala(jogador, nivel_atual, resetar_jogador=False)
                     else:
                         estado = "FINAL"
+                        tempo_final = tempo
                         sons.parar_tudo()
                         sons.tocar("final")
                 elif contexto["condicao_transicao"](contexto, jogador):
@@ -303,15 +408,14 @@ def main():
                 tela.blit(dica, dica.get_rect(center=(LARGURA // 2, ALTURA - 50)))
 
         elif estado == "FINAL":
-            tela.fill((5, 5, 10))
-            linha1 = fonte_titulo.render("FIM", True, BRANCO)
-            texto_final = contexto.get("mensagem_final", "Fim da demonstração.")
-            linha2 = fonte_subtitulo.render(texto_final, True, (190, 190, 210))
-            linha3 = fonte_subtitulo.render(
-                "Pressione [ESPAÇO] para voltar ao menu", True, (130, 130, 150))
-            tela.blit(linha1, linha1.get_rect(center=(LARGURA // 2, ALTURA // 2 - 60)))
-            tela.blit(linha2, linha2.get_rect(center=(LARGURA // 2, ALTURA // 2)))
-            tela.blit(linha3, linha3.get_rect(center=(LARGURA // 2, ALTURA // 2 + 60)))
+            decorrido = tempo - tempo_final
+            desenhar_epilogo_varanda(tela, decorrido, fonte_subtitulo)
+            if decorrido > 13000:
+                tela.fill((0, 0, 0))
+                fim = fonte_subtitulo.render("ECO DO ABISMO", True, (147, 153, 161))
+                tela.blit(fim, fim.get_rect(center=(LARGURA//2, ALTURA//2)))
+                dica = fonte_subtitulo.render("[ESPAÇO] MENU", True, (90, 99, 108))
+                tela.blit(dica, dica.get_rect(center=(LARGURA//2, ALTURA-48)))
 
         pygame.display.flip()
         relogio.tick(60)
