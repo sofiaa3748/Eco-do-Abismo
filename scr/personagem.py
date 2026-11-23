@@ -1,554 +1,533 @@
 import pygame
-import math
-from abc import ABC, abstractmethod
+import random
 
-from configuracoes import ROXO_ALUCINACAO, VERMELHO_ALARME
+import sprites
 
-class Personagem(ABC):
-    def __init__(self, x, y, nome, dano):
-        self.x = x
-        self.y = y
-        self.nome = nome
-        self.dano = dano
-        self.vida = 100.0
+# Identidade visual unificada: metal envelhecido, latão e luz de emergência.
+def _moldura(surf, rect, titulo=None, fonte=None):
+    sombra = rect.move(7, 9)
+    pygame.draw.rect(surf, (3, 7, 12), sombra, border_radius=15)
+    pygame.draw.rect(surf, (25, 34, 42), rect, border_radius=13)
+    pygame.draw.rect(surf, (97, 115, 122), rect, 3, border_radius=13)
+    pygame.draw.rect(surf, (154, 117, 65), rect.inflate(-12, -12), 1, border_radius=10)
+    pygame.draw.rect(surf, (37, 48, 55), (rect.x + 16, rect.y + 15, rect.w - 32, 46), border_radius=6)
+    for x in (rect.left + 12, rect.right - 12):
+        for y in (rect.top + 12, rect.bottom - 12):
+            pygame.draw.circle(surf, (9, 14, 19), (x, y), 5)
+            pygame.draw.circle(surf, (151, 147, 127), (x, y), 3, 1)
+    if titulo and fonte:
+        img = fonte.render(titulo, True, (234, 204, 147))
+        surf.blit(img, img.get_rect(center=(rect.centerx, rect.y + 37)))
 
-    def atacar(self, personagem):
-        personagem.tomar_dano(self.dano)
 
-    def tomar_dano(self, quantidade):
-        self.vida -= quantidade
-        if self.vida <= 0:
-            self.vida = 0
-            return True
-        return False
+def _ferramenta_arte(surf, rect, tipo):
+    cx, cy = rect.centerx, rect.centery - 8
+    metal, luz, cabo, borracha = (146, 166, 174), (222, 232, 238), (136, 81, 54), (58, 64, 72)
+    pygame.draw.ellipse(surf, (0, 0, 0, 45), (rect.x + 18, rect.bottom - 20, rect.width - 36, 10))
+    if tipo in ('chave', 'inglesa'):
+        pygame.draw.line(surf, metal, (cx - 23, cy + 12), (cx + 15, cy - 11), 8)
+        pygame.draw.line(surf, luz, (cx - 22, cy + 11), (cx + 10, cy - 8), 2)
+        pygame.draw.circle(surf, luz, (cx - 22, cy + 13), 6, 2)
+        pygame.draw.lines(surf, luz, False, [(cx + 8, cy - 18), (cx + 18, cy - 12), (cx + 25, cy - 21)], 5)
+        pygame.draw.line(surf, borracha, (cx - 18, cy + 15), (cx - 10, cy + 9), 3)
+    elif tipo == 'alicate':
+        pygame.draw.line(surf, cabo, (cx - 17, cy + 19), (cx + 2, cy - 6), 8)
+        pygame.draw.line(surf, cabo, (cx + 18, cy + 19), (cx + 2, cy - 6), 8)
+        pygame.draw.line(surf, (176, 106, 74), (cx - 16, cy + 17), (cx, cy - 4), 2)
+        pygame.draw.line(surf, (176, 106, 74), (cx + 16, cy + 17), (cx, cy - 4), 2)
+        pygame.draw.lines(surf, luz, False, [(cx - 13, cy - 20), (cx + 2, cy - 6), (cx + 15, cy - 21)], 5)
+        pygame.draw.circle(surf, borracha, (cx + 2, cy - 6), 5)
+        pygame.draw.circle(surf, luz, (cx + 2, cy - 6), 2)
+    elif tipo == 'pe':
+        pygame.draw.line(surf, metal, (cx - 23, cy + 19), (cx + 15, cy - 17), 8)
+        pygame.draw.line(surf, luz, (cx - 21, cy + 17), (cx + 13, cy - 15), 2)
+        pygame.draw.lines(surf, luz, False, [(cx + 10, cy - 13), (cx + 21, cy - 20), (cx + 28, cy - 14)], 5)
+        pygame.draw.arc(surf, luz, (cx + 14, cy - 24, 14, 14), 3.7, 6.0, 2)
+    elif tipo == 'martelo':
+        pygame.draw.line(surf, cabo, (cx - 12, cy + 19), (cx + 10, cy - 15), 8)
+        pygame.draw.line(surf, (180, 104, 74), (cx - 9, cy + 16), (cx + 8, cy - 12), 2)
+        pygame.draw.rect(surf, metal, (cx - 8, cy - 24, 30, 12), border_radius=3)
+        pygame.draw.rect(surf, luz, (cx - 6, cy - 22, 26, 4), border_radius=2)
+        pygame.draw.rect(surf, borracha, (cx + 18, cy - 22, 8, 8), border_radius=2)
+    else:
+        pygame.draw.line(surf, cabo, (cx - 21, cy + 17), (cx + 3, cy - 3), 9)
+        pygame.draw.line(surf, (180, 104, 74), (cx - 18, cy + 14), (cx, cy - 1), 2)
+        pygame.draw.line(surf, metal, (cx + 2, cy - 2), (cx + 23, cy - 20), 5)
+        pygame.draw.circle(surf, (215, 154, 76), (cx - 19, cy + 15), 4)
+        pygame.draw.circle(surf, (240, 210, 120), (cx - 19, cy + 15), 2)
 
-    @abstractmethod
-    def mover(self, direcao):
-        raise NotImplementedError
 
-class Jogador(Personagem):
-    def __init__(self, x, y, nome):
-        super().__init__(x, y, nome, dano=10)
-        self.nome = 'Operário 724'
-        self.agachado = False
-        self.tem_pe_de_cabra = False
-        self.direcao = 'frente'
-        self.andando = False
-        self.frame_index = 0
-        self.tamanho_base = 110
 
-    def get_rect(self):
-        if self.agachado:
-            return pygame.Rect(self.x, self.y + int(self.tamanho_base * 0.375), self.tamanho_base, int(self.tamanho_base * 0.625))
-        return pygame.Rect(self.x, self.y, self.tamanho_base, self.tamanho_base)
+def _linha_texto(surf, fonte, texto, x, y, cor, centro=True):
+    img = fonte.render(texto, True, cor)
+    rect = img.get_rect(center=(x, y)) if centro else img.get_rect(topleft=(x, y))
+    surf.blit(img, rect)
+    return rect
 
-    def mover(self, direcao):
-        vel = 2.0 if self.agachado else 4.0
-        if direcao == 'esquerda':
-            self.x -= vel
-        elif direcao == 'direita':
-            self.x += vel
-        elif direcao == 'cima':
-            self.y -= vel
-        elif direcao == 'baixo':
-            self.y += vel
+class PuzzleRadio:
+    def __init__(self, largura, altura):
+        self.largura = largura
+        self.altura = altura
 
-    def andar_teclas(self, teclas, largura, altura, paredes):
-        vel = 1.5 if self.agachado else 4.0
-        dx, dy = 0, 0
-        if teclas[pygame.K_LEFT] or teclas[pygame.K_a]:
-            dx = -vel
-        if teclas[pygame.K_RIGHT] or teclas[pygame.K_d]:
-            dx = vel
-        if teclas[pygame.K_UP] or teclas[pygame.K_w]:
-            dy = -vel
-        if teclas[pygame.K_DOWN] or teclas[pygame.K_s]:
-            dy = vel
+        self.rect_painel = pygame.Rect(largura // 2 - 200, altura // 2 - 150, 400, 300)
 
-        self.x += dx
-        for p in paredes:
-            if self.get_rect().colliderect(p):
-                self.x -= dx
-                break
+        self.freq_min = 88.0
+        self.freq_max = 108.0
+        self.freq_atual = 88.0
 
-        self.y += dy
-        for p in paredes:
-            if self.get_rect().colliderect(p):
-                self.y -= dy
-                break
+        self.freq_alvo = random.choice([90.0, 92.5, 95.0, 98.2, 101.5, 104.0, 107.1])
 
-        self.x = max(0, min(self.x, largura - self.tamanho_base))
-        self.y = max(0, min(self.y, altura - self.tamanho_base))
+        self.resolvido = False
+        self.ativo = False  
+        self.tolerancia = 0.4
 
-    def dano_sanidade(self, valor):
-        self.sanidade -= valor
-        if self.sanidade < 0:
-            self.sanidade = 0
-
-    def atualizar_animacao(self, dx, dy, tempo_ms):
-        if dx != 0 or dy != 0:
-            self.andando = True
-            if abs(dx) >= abs(dy):
-                self.direcao = 'direita' if dx > 0 else 'esquerda'
-            else:
-                self.direcao = 'costas' if dy < 0 else 'frente'
-            self.frame_index = (tempo_ms // 150) % 2
-        else:
-            self.andando = False
-            self.frame_index = 0
-
-    def desenhar(self, tela, sprites, offset=(0, 0)):
-        grupo = sprites[self.direcao]
-        imagem = grupo['andando'][self.frame_index] if self.andando else grupo['parado']
-
-        imagem = pygame.transform.scale(imagem, (self.tamanho_base, self.tamanho_base))
-
-        if self.agachado:
-            largura_img, altura_img = imagem.get_size()
-            imagem = pygame.transform.scale(imagem, (largura_img, int(altura_img * 0.65)))
-
-        rect_colisao = self.get_rect()
-
-        pos_pes = (rect_colisao.centerx + offset[0], rect_colisao.bottom + offset[1] + 2)
-
-        rect_imagem = imagem.get_rect(midbottom=pos_pes)
-        tela.blit(imagem, rect_imagem)
-
-    def atacar(self, personagem):
-        return super().atacar(personagem)
-
-class CameraSeguranca(Personagem):
-
-    def __init__(self, x, y, angulo_inicial, alcance, abertura_graus, velocidade_giro, arco_max):
-        super().__init__(x, y, nome='Câmera de segurança', dano=0)
-        self.angulo_atual = angulo_inicial
-        self.angulo_base = angulo_inicial
-        self.alcance = alcance
-        self.abertura = abertura_graus
-        self.vel = velocidade_giro
-        self.arco_max = arco_max
-        self.direcao_giro = 1
-
-    def mover(self, direcao):
+    def processar_evento(self, evento):
         pass
 
-    def atualizar(self):
-        if self.arco_max > 0:
-            self.angulo_atual += self.vel * self.direcao_giro
-            if abs(self.angulo_atual - self.angulo_base) > self.arco_max:
-                self.direcao_giro *= -1
-
-    def desenhar(self, surf_base, cone_surf, jogador):
-        pygame.draw.circle(surf_base, (50, 50, 50), (self.x, self.y), 10)
-        pygame.draw.circle(surf_base, (255, 50, 50), (self.x, self.y), 4)
-
-        pontos = [(self.x, self.y)]
-        passos = 12
-        ang_inicial = math.radians(self.angulo_atual - self.abertura / 2)
-        ang_final = math.radians(self.angulo_atual + self.abertura / 2)
-
-        for i in range(passos + 1):
-            ang = ang_inicial + (ang_final - ang_inicial) * (i / passos)
-            px = self.x + math.cos(ang) * self.alcance
-            py = self.y + math.sin(ang) * self.alcance
-            pontos.append((px, py))
-
-        cor_cone = (255, 50, 50, 70) if self.detecta(jogador) else (255, 255, 100, 50)
-        pygame.draw.polygon(cone_surf, cor_cone, pontos)
-
-    def detecta(self, jogador):
-        rect = jogador.get_rect()
-        centro_j = rect.center
-        dist = math.hypot(centro_j[0] - self.x, centro_j[1] - self.y)
-
-        if dist > self.alcance:
-            return False
-
-        ang_j = math.degrees(math.atan2(centro_j[1] - self.y, centro_j[0] - self.x))
-        ang_diff = (ang_j - self.angulo_atual + 180) % 360 - 180
-
-        if abs(ang_diff) <= self.abertura / 2:
-            return True
-        return False
-
-
-class Inimigo(Personagem):
-    """Vulto que surge no escuro, persegue o jogador e drena a sanidade ao tocá-lo."""
-
-    DURACAO_SURGIMENTO = 1000
-
-    def __init__(self, x, y, velocidade=2.6, dano=7, recarga_ms=900, atraso_ms=0, lado_desvio=1):
-        super().__init__(x, y, nome='Vulto', dano=dano)
-        self.velocidade = velocidade
-        self.recarga_ms = recarga_ms
-        self.atraso_ms = atraso_ms
-        self.lado_desvio = lado_desvio
-        self.tamanho = 56
-        self.tempo_surgimento = None
-        self.ultimo_ataque = -10 ** 9
-        self.semente = x * 0.013 + y * 0.007
-
-    def get_rect(self):
-        return pygame.Rect(int(self.x), int(self.y), self.tamanho, self.tamanho)
-
-    def surgir(self, tempo_ms):
-        if self.tempo_surgimento is None:
-            self.tempo_surgimento = tempo_ms + self.atraso_ms
-
-    def progresso_surgimento(self, tempo_ms):
-        if self.tempo_surgimento is None:
-            return 0.0
-        return max(0.0, min(1.0, (tempo_ms - self.tempo_surgimento) / self.DURACAO_SURGIMENTO))
-
-    def ativo(self, tempo_ms):
-        return self.progresso_surgimento(tempo_ms) >= 1.0
-
-    def mover(self, direcao):
-        if direcao == 'esquerda':
-            self.x -= self.velocidade
-        elif direcao == 'direita':
-            self.x += self.velocidade
-        elif direcao == 'cima':
-            self.y -= self.velocidade
-        elif direcao == 'baixo':
-            self.y += self.velocidade
-
-    def _bate(self, paredes):
-        rect = self.get_rect()
-        return any(rect.colliderect(p) for p in paredes)
-
-    def _deslocar(self, dx, dy, paredes):
-        """Anda em X e em Y separadamente (assim ele desliza nas paredes). Devolve (moveu_x, moveu_y)."""
-        moveu_x = moveu_y = True
-        self.x += dx
-        if self._bate(paredes):
-            self.x -= dx
-            moveu_x = False
-        self.y += dy
-        if self._bate(paredes):
-            self.y -= dy
-            moveu_y = False
-        return moveu_x, moveu_y
-
-    def perseguir(self, jogador, paredes, tempo_ms, outros=()):
-        if not self.ativo(tempo_ms):
+    def atualizar(self, teclas):
+        if self.resolvido:
+            if teclas[pygame.K_SPACE]:
+                self.ativo = False
             return
 
-        cx, cy = self.get_rect().center
-        alvo_x, alvo_y = jogador.get_rect().center
-        vx, vy = alvo_x - cx, alvo_y - cy
-        dist = math.hypot(vx, vy)
-        if dist < 50:
+        if teclas[pygame.K_LEFT] or teclas[pygame.K_a]:
+            self.freq_atual -= 0.08
+        if teclas[pygame.K_RIGHT] or teclas[pygame.K_d]:
+            self.freq_atual += 0.08
+
+        self.freq_atual = max(self.freq_min, min(self.freq_max, self.freq_atual))
+
+        if abs(self.freq_atual - self.freq_alvo) <= self.tolerancia:
+            self.freq_atual = self.freq_alvo
+            self.resolvido = True
+
+    def desenhar(self, surf, fonte):
+        overlay = pygame.Surface((self.largura, self.altura), pygame.SRCALPHA)
+        overlay.fill((4, 8, 14, 226))
+        surf.blit(overlay, (0, 0))
+        painel = self.rect_painel
+        _moldura(surf, painel, "RADIO  /  SINTONIA", fonte)
+        corpo = painel.inflate(-28, -76)
+        corpo.y += 16
+        pygame.draw.rect(surf, (15, 24, 29), corpo, border_radius=8)
+        pygame.draw.rect(surf, (96, 106, 110), corpo, 2, border_radius=8)
+        visor = pygame.Rect(painel.x + 36, painel.y + 86, painel.width - 72, 64)
+        pygame.draw.rect(surf, (8, 31, 25), visor, border_radius=5)
+        pygame.draw.rect(surf, (75, 214, 163), visor, 2, border_radius=5)
+        status = "SINAL SINTONIZADO" if self.resolvido else f"{self.freq_atual:.1f} MHz"
+        _linha_texto(surf, fonte, status, visor.centerx, visor.centery - 11, (112, 245, 177))
+        subtitulo = "PORTA LIBERADA" if self.resolvido else f"ALVO {self.freq_alvo:.1f} MHz"
+        _linha_texto(surf, fonte, subtitulo, visor.centerx, visor.centery + 14, (232, 198, 117))
+        y = painel.y + 194
+        x0, x1 = painel.x + 40, painel.right - 40
+        pygame.draw.rect(surf, (24, 29, 34), (x0, y - 12, x1 - x0, 30), border_radius=5)
+        pygame.draw.line(surf, (104, 119, 121), (x0, y), (x1, y), 4)
+        for f in range(88, 109, 4):
+            px = x0 + int((f - self.freq_min) / (self.freq_max - self.freq_min) * (x1 - x0))
+            pygame.draw.line(surf, (187, 193, 190), (px, y - 8), (px, y + 8), 2)
+            _linha_texto(surf, pygame.font.Font(None, 17), str(f), px, y + 30, (177, 185, 188))
+        px = x0 + int((self.freq_atual - self.freq_min) / (self.freq_max - self.freq_min) * (x1 - x0))
+        pygame.draw.line(surf, (246, 91, 77), (px, y - 16), (px, y + 17), 4)
+        _linha_texto(surf, pygame.font.Font(None, 20), "L / R  -  SINTONIZAR", painel.centerx, painel.bottom - 27, (192, 211, 205))
+        if self.resolvido:
+            _linha_texto(surf, pygame.font.Font(None, 20), "ESPACO PARA CONTINUAR", painel.centerx, painel.bottom + 28, (126, 245, 175))
+
+class CaixaArrastavel:
+    def __init__(self, x, y):
+        self.rect = pygame.Rect(x, y, 55, 55)
+
+    def desenhar(self, surf):
+        sprites.desenhar_caixa(surf, self.rect)
+
+class PuzzleCaixaFerramentas:
+    """Puzzle simples: alinhar três pinos e depois arrastar ferramentas até achar o pé de cabra."""
+    def __init__(self, largura, altura):
+        self.largura, self.altura = largura, altura
+        self.ativo = False
+        self.resolvido = False
+        self.etapa = "pinos"
+        self.combinacao = [2, 1, 3]
+        self.valores = [1, 1, 1]
+        self.selecionado = 0
+        self.mensagem = "Ajuste os 3 pinos para a marca indicada."
+        self.ferramentas = [
+            {"nome": "CHAVE", "tipo": "chave", "rect": pygame.Rect(0, 0, 100, 52), "cor": (130, 145, 160), "correta": False},
+            {"nome": "ALICATE", "tipo": "alicate", "rect": pygame.Rect(0, 0, 100, 52), "cor": (170, 105, 55), "correta": False},
+            {"nome": "PÉ DE CABRA", "tipo": "pe", "rect": pygame.Rect(0, 0, 100, 52), "cor": (185, 190, 198), "correta": True},
+            {"nome": "CHAVE INGLESA", "tipo": "inglesa", "rect": pygame.Rect(0, 0, 100, 52), "cor": (105, 130, 145), "correta": False},
+            {"nome": "MARTELO", "tipo": "martelo", "rect": pygame.Rect(0, 0, 100, 52), "cor": (135, 100, 70), "correta": False},
+            {"nome": "CHAVE DE FENDA", "tipo": "fenda", "rect": pygame.Rect(0, 0, 100, 52), "cor": (155, 145, 95), "correta": False},
+        ]
+        self.arrastando = None
+        self.mouse = (0, 0)
+        self.zona_busca = pygame.Rect(largura // 2 - 210, altura // 2 + 65, 420, 95)
+        self.ferramenta_encontrada = False
+
+    def processar_evento(self, evento):
+        if not self.ativo or self.resolvido:
             return
+        if evento.type == pygame.KEYDOWN and self.etapa == "pinos":
+            if evento.key in (pygame.K_LEFT, pygame.K_a):
+                self.selecionado = (self.selecionado - 1) % 3
+            elif evento.key in (pygame.K_RIGHT, pygame.K_d):
+                self.selecionado = (self.selecionado + 1) % 3
+            elif evento.key in (pygame.K_UP, pygame.K_w):
+                self.valores[self.selecionado] = self.valores[self.selecionado] % 3 + 1
+            elif evento.key in (pygame.K_DOWN, pygame.K_s):
+                self.valores[self.selecionado] = (self.valores[self.selecionado] - 2) % 3 + 1
+            elif evento.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                if self.valores == self.combinacao:
+                    self.etapa = "ferramentas"
+                    self.mensagem = "Caixa aberta! Arraste cada ferramenta para a bancada de busca."
+                else:
+                    self.mensagem = "Ainda não encaixou. Tente novamente; não há penalidade."
+        elif evento.type == pygame.MOUSEMOTION and self.etapa == "ferramentas":
+            self.mouse = evento.pos
+            if self.arrastando is not None:
+                self.ferramentas[self.arrastando]["rect"].center = evento.pos
+        elif evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1 and self.etapa == "ferramentas":
+            for i in range(len(self.ferramentas) - 1, -1, -1):
+                if self.ferramentas[i]["rect"].collidepoint(evento.pos):
+                    self.arrastando = i
+                    break
+        elif evento.type == pygame.MOUSEBUTTONUP and evento.button == 1 and self.etapa == "ferramentas":
+            if self.arrastando is not None:
+                item = self.ferramentas[self.arrastando]
+                if self.zona_busca.collidepoint(evento.pos):
+                    if item["correta"]:
+                        self.ferramenta_encontrada = True
+                        self.resolvido = True
+                        self.ativo = False
+                        self.mensagem = "Pé de cabra encontrado!"
+                    else:
+                        self.mensagem = "Não é essa. Continue procurando."
+                        item["rect"].topleft = self._posicao_item(self.arrastando)
+                else:
+                    item["rect"].topleft = self._posicao_item(self.arrastando)
+                self.arrastando = None
 
-        dx = vx / dist * self.velocidade
-        dy = vy / dist * self.velocidade
+    def _posicao_item(self, i):
+        col, lin = i % 3, i // 3
+        return (self.largura // 2 - 165 + col * 115, self.altura // 2 - 110 + lin * 65)
 
-        for outro in outros:
-            if outro is self or not outro.ativo(tempo_ms):
+    def desenhar(self, surf, fonte):
+        overlay = pygame.Surface((self.largura, self.altura), pygame.SRCALPHA)
+        overlay.fill((4, 8, 14, 229))
+        surf.blit(overlay, (0, 0))
+        painel = pygame.Rect(self.largura // 2 - 305, self.altura // 2 - 225, 610, 450)
+        titulo = "CAIXA DE FERRAMENTAS  /  TRAVA" if self.etapa == "pinos" else "CAIXA DE FERRAMENTAS  /  INVENTARIO"
+        _moldura(surf, painel, titulo, fonte)
+        interno = painel.inflate(-32, -82)
+        pygame.draw.rect(surf, (18, 24, 30), interno, border_radius=10)
+        pygame.draw.rect(surf, (82, 92, 101), interno, 2, border_radius=10)
+        if self.etapa == "pinos":
+            placa = pygame.Rect(interno.x + 26, interno.y + 12, interno.w - 52, 164)
+            pygame.draw.rect(surf, (24, 32, 36), placa, border_radius=8)
+            pygame.draw.rect(surf, (120, 124, 118), placa, 2, border_radius=8)
+            for i, valor in enumerate(self.valores):
+                x = placa.x + 95 + i * 160
+                r = pygame.Rect(x - 42, placa.y + 24, 84, 112)
+                pygame.draw.rect(surf, (55, 62, 70), r, border_radius=10)
+                pygame.draw.rect(surf, (220, 174, 93) if i == self.selecionado else (112, 124, 136), r, 3, border_radius=10)
+                visor = r.inflate(-18, -20)
+                pygame.draw.rect(surf, (10, 16, 20), visor, border_radius=6)
+                _linha_texto(surf, fonte, str(valor), visor.centerx, visor.centery - 8, (242, 214, 154))
+                _linha_texto(surf, pygame.font.Font(None, 19), f"PINO {i+1:02}", visor.centerx, visor.bottom - 14, (177, 193, 188))
+                for step in range(3):
+                    py = visor.y + 18 + step * 20
+                    pygame.draw.line(surf, (42, 55, 61), (visor.x + 8, py), (visor.right - 8, py), 1)
+            linhas = ["SETAS: selecionar e ajustar", "MARCA DE INSPECAO: 2 - 1 - 3", "ENTER: destravar  |  ESC: sair"]
+            for i, linha in enumerate(linhas):
+                _linha_texto(surf, fonte, linha, painel.centerx, painel.y + 302 + i * 28, (204, 211, 203))
+        else:
+            if not any(item["rect"].topleft != (0, 0) for item in self.ferramentas):
+                for i, item in enumerate(self.ferramentas):
+                    item["rect"].topleft = self._posicao_item(i)
+            area = pygame.Rect(interno.x + 18, interno.y + 12, interno.w - 36, 205)
+            pygame.draw.rect(surf, (22, 28, 32), area, border_radius=8)
+            pygame.draw.rect(surf, (108, 116, 121), area, 2, border_radius=8)
+            for item in self.ferramentas:
+                r = item["rect"]
+                pygame.draw.rect(surf, (18, 24, 28), r.move(4, 5), border_radius=8)
+                pygame.draw.rect(surf, (72, 80, 84), r, border_radius=8)
+                pygame.draw.rect(surf, (171, 152, 111), r, 2, border_radius=8)
+                pygame.draw.line(surf, (104, 112, 116), (r.x + 8, r.y + 8), (r.right - 8, r.y + 8), 1)
+                _ferramenta_arte(surf, r, item["tipo"])
+                mini = pygame.font.Font(None, 15)
+                _linha_texto(surf, mini, item["nome"], r.centerx, r.bottom - 10, (245, 225, 179))
+            pygame.draw.rect(surf, (10, 40, 36), self.zona_busca, border_radius=10)
+            pygame.draw.rect(surf, (91, 190, 160), self.zona_busca, 3, border_radius=10)
+            _linha_texto(surf, fonte, "BANCADA DE INSPECAO", self.zona_busca.centerx, self.zona_busca.centery - 10, (190, 235, 216))
+            _linha_texto(surf, pygame.font.Font(None, 20), "Arraste as ferramentas ate aqui e encontre o pe de cabra.", self.zona_busca.centerx, self.zona_busca.centery + 18, (205, 225, 218))
+        mini = pygame.font.Font(None, 20)
+        _linha_texto(surf, mini, self.mensagem[:90], painel.centerx, painel.bottom - 22, (233, 184, 115))
+
+class PuzzlePainelSenha:
+    def __init__(self, senha):
+        self.senha = list(senha)
+        self.pistas_coletadas = [None] * len(self.senha)
+        self.resolvido = False
+        self.ativo = False
+        self.entrada = ""
+        self.erros = 0
+        self.mensagem = "Insira os quatro números encontrados."
+
+    def registrar_pista(self, indice, valor):
+        if 0 <= indice < len(self.pistas_coletadas):
+            self.pistas_coletadas[indice] = valor
+
+    def completo(self):
+        return all(v is not None for v in self.pistas_coletadas)
+
+    def tentar_abrir(self):
+        return self.resolvido
+
+    def texto_progresso(self):
+        return " ".join(v if v is not None else "_" for v in self.pistas_coletadas)
+
+    def processar_evento(self, evento):
+        if not self.ativo or self.resolvido or evento.type != pygame.KEYDOWN:
+            return
+        if pygame.K_0 <= evento.key <= pygame.K_9 and len(self.entrada) < 4:
+            self.entrada += chr(evento.key)
+        elif evento.key == pygame.K_BACKSPACE:
+            self.entrada = self.entrada[:-1]
+        elif evento.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+            if list(self.entrada) == self.senha:
+                self.resolvido = True
+                self.ativo = False
+                self.mensagem = "Senha aceita. A porta foi destrancada."
+            else:
+                self.erros += 1
+                self.entrada = ""
+                self.mensagem = "Senha incorreta. Confira as pistas."
+
+    def desenhar(self, surf, fonte):
+        overlay = pygame.Surface((surf.get_width(), surf.get_height()), pygame.SRCALPHA)
+        overlay.fill((7, 10, 18, 238))
+        surf.blit(overlay, (0, 0))
+        painel = pygame.Rect(surf.get_width() // 2 - 250, surf.get_height() // 2 - 165, 500, 330)
+        _moldura(surf, painel, "PAINEL DE ACESSO", fonte)
+        corpo = painel.inflate(-30, -80)
+        pygame.draw.rect(surf, (14, 20, 26), corpo, border_radius=9)
+        pygame.draw.rect(surf, (116, 126, 136), corpo, 2, border_radius=9)
+        linhas = [
+            "Digite os quatro numeros encontrados pela sala.",
+            "BACKSPACE apaga  |  ENTER confirma  |  ESC fecha",
+        ]
+        for i, linha in enumerate(linhas):
+            _linha_texto(surf, fonte, linha, painel.centerx, painel.y + 86 + i * 28, (205, 215, 225))
+        campo = pygame.Rect(painel.centerx - 142, painel.y + 176, 284, 60)
+        pygame.draw.rect(surf, (7, 16, 20), campo, border_radius=7)
+        pygame.draw.rect(surf, (70, 220, 170), campo, 2, border_radius=7)
+        mostrado = self.entrada + "_" * (4 - len(self.entrada))
+        _linha_texto(surf, fonte, "  ".join(mostrado), campo.centerx, campo.centery, (100, 255, 190))
+        leds_y = campo.bottom + 28
+        for i, v in enumerate(self.pistas_coletadas):
+            cor = (86, 230, 172) if v is not None else (54, 66, 74)
+            pygame.draw.circle(surf, cor, (painel.centerx - 90 + i * 60, leds_y), 7)
+            rot = pygame.font.Font(None, 20).render(str(v) if v is not None else "?", True, (18, 24, 28) if v is not None else (175, 185, 194))
+            surf.blit(rot, rot.get_rect(center=(painel.centerx - 90 + i * 60, leds_y)))
+        rodape = f"{self.mensagem}  Erros: {self.erros}"[:56]
+        _linha_texto(surf, pygame.font.Font(None, 22), rodape, painel.centerx, painel.bottom - 22, (255, 180, 130) if self.erros else (175, 205, 195))
+
+
+class PuzzleCofre:
+    def __init__(self, rect_placa, palavra_chave):
+        self.rect_placa = rect_placa
+        self.palavra_chave = palavra_chave.upper()
+        self.revelado = False
+        self.aberto = False
+        self.ativo = False
+        self.entrada = ""
+        self.erros = 0
+        self.mensagem = "Digite a palavra montada pelos fragmentos."
+
+    def checar_revelado(self, caixas):
+        if not self.revelado:
+            bloqueado = any(c.rect.colliderect(self.rect_placa) for c in caixas)
+            self.revelado = not bloqueado
+        return self.revelado
+
+    def tentar_abrir(self, sabe_palavra_chave):
+        if self.revelado and sabe_palavra_chave:
+            self.ativo = True
+        return self.aberto
+
+    def processar_evento(self, evento):
+        if not self.ativo or self.aberto or evento.type != pygame.KEYDOWN:
+            return
+        if pygame.K_a <= evento.key <= pygame.K_z and len(self.entrada) < len(self.palavra_chave):
+            self.entrada += chr(evento.key).upper()
+        elif evento.key == pygame.K_BACKSPACE:
+            self.entrada = self.entrada[:-1]
+        elif evento.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+            if self.entrada == self.palavra_chave:
+                self.aberto = True
+                self.ativo = False
+                self.mensagem = "Cofre aberto."
+            else:
+                self.erros += 1
+                self.entrada = ""
+                self.mensagem = "Palavra incorreta. Releia os fragmentos."
+
+    def desenhar(self, surf, fonte):
+        if self.ativo:
+            overlay = pygame.Surface((surf.get_width(), surf.get_height()), pygame.SRCALPHA)
+            overlay.fill((7, 10, 18, 238))
+            surf.blit(overlay, (0, 0))
+            painel = pygame.Rect(surf.get_width() // 2 - 255, surf.get_height() // 2 - 170, 510, 340)
+            _moldura(surf, painel, "COFRE DE EVIDENCIAS", fonte)
+            corpo = painel.inflate(-28, -84)
+            pygame.draw.rect(surf, (18, 16, 13), corpo, border_radius=9)
+            pygame.draw.rect(surf, (185, 155, 100), corpo, 2, border_radius=9)
+            linhas = [
+                "Monte a palavra usando os tres fragmentos.",
+                "Digite as letras e pressione ENTER.  |  BACKSPACE apaga",
+            ]
+            for i, linha in enumerate(linhas):
+                _linha_texto(surf, fonte, linha, painel.centerx, painel.y + 86 + i * 28, (215, 215, 205))
+            campo = pygame.Rect(painel.centerx - 160, painel.y + 188, 320, 54)
+            pygame.draw.rect(surf, (10, 9, 7), campo, border_radius=7)
+            pygame.draw.rect(surf, (205, 170, 105), campo, 2, border_radius=7)
+            mostrado = self.entrada + "_" * (len(self.palavra_chave) - len(self.entrada))
+            _linha_texto(surf, fonte, "  ".join(mostrado), campo.centerx, campo.centery, (255, 220, 150))
+            rodape = f"{self.mensagem} Erros: {self.erros}"[:60]
+            _linha_texto(surf, pygame.font.Font(None, 22), rodape, painel.centerx, painel.bottom - 22, (255, 180, 130) if self.erros else (200, 200, 185))
+            return
+        if self.revelado:
+            sprites.desenhar_cofre(surf, self.rect_placa, self.aberto, fonte)
+
+
+class PuzzleValvulas:
+    def __init__(self, posicoes, ordem_correta=None):
+        self.valvulas = [{"pos": p, "girada": False, "id": i} for i, p in enumerate(posicoes)]
+        self.raio_interacao = 45
+        self.ordem_correta = list(ordem_correta) if ordem_correta is not None else list(range(len(posicoes)))
+        self.progresso = []
+        self.erros = 0
+        self.ultima_mensagem = ""
+
+    def valvula_proxima(self, jogador):
+        centro = jogador.get_rect().center
+        for v in self.valvulas:
+            if v["girada"]:
                 continue
-            ox, oy = outro.get_rect().center
-            d = math.hypot(cx - ox, cy - oy)
-            if 0 < d < self.tamanho:
-                dx += (cx - ox) / d * 0.8
-                dy += (cy - oy) / d * 0.8
+            dist = ((centro[0] - v["pos"][0]) ** 2 + (centro[1] - v["pos"][1]) ** 2) ** 0.5
+            if dist <= self.raio_interacao:
+                return v
+        return None
 
-        moveu_x, moveu_y = self._deslocar(dx, dy, paredes)
-
-        if not moveu_x and abs(dy) < self.velocidade * 0.5:
-            self._deslocar(0, self.lado_desvio * self.velocidade, paredes)
-        elif not moveu_y and abs(dx) < self.velocidade * 0.5:
-            self._deslocar(self.lado_desvio * self.velocidade, 0, paredes)
-
-    def pode_atacar(self, jogador, tempo_ms):
-        if not self.ativo(tempo_ms):
-            return False
-        if tempo_ms - self.ultimo_ataque < self.recarga_ms:
-            return False
-        return self.get_rect().inflate(10, 10).colliderect(jogador.get_rect())
-
-    def atacar(self, jogador, tempo_ms=0):
-        self.ultimo_ataque = tempo_ms
-        jogador.dano_sanidade(self.dano)
-
-    def tentar_atacar(self, jogador, tempo_ms):
-        if self.pode_atacar(jogador, tempo_ms):
-            self.atacar(jogador, tempo_ms)
+    def girar(self, valvula):
+        if valvula["id"] == self.ordem_correta[len(self.progresso)]:
+            valvula["girada"] = True
+            self.progresso.append(valvula["id"])
+            self.ultima_mensagem = "A válvula encaixou na sequência."
             return True
+        self.erros += 1
+        for v in self.valvulas:
+            v["girada"] = False
+        self.progresso = []
+        self.ultima_mensagem = "Sequência errada! A pressão voltou e todas as válvulas retornaram."
         return False
 
-    def desenhar_corpo(self, surf, tempo_ms):
-        prog = self.progresso_surgimento(tempo_ms)
-        if prog <= 0:
-            return
-        a = int(255 * prog)
-        rect = self.get_rect()
-        tremor = int(2 * math.sin(tempo_ms / 90 + self.semente))
+    def todas_giradas(self):
+        return len(self.progresso) == len(self.ordem_correta)
 
-        fig = pygame.Surface((70, 90), pygame.SRCALPHA)
-        pygame.draw.ellipse(fig, (*ROXO_ALUCINACAO, a // 6), (0, 10, 70, 80))
-        manto = [(35 + tremor, 8), (58, 40), (62, 82), (52, 76), (44, 86),
-                 (35, 76), (26, 86), (18, 76), (8, 82), (12, 40)]
-        pygame.draw.polygon(fig, (22, 12, 34, int(a * 0.95)), manto)
-        pygame.draw.polygon(fig, (70, 35, 105, a), manto, width=2)
-        surf.blit(fig, (rect.centerx - 35, rect.bottom - 86))
+    def desenhar(self, surf):
+        tempo = pygame.time.get_ticks()
+        for v in self.valvulas:
+            sprites.desenhar_valvula(surf, v["pos"], v["girada"], tempo)
 
-    def desenhar_olhos(self, surf, tempo_ms):
-        """Separado do corpo para os olhos poderem brilhar por cima da escuridão."""
-        prog = self.progresso_surgimento(tempo_ms)
-        if prog <= 0:
-            return
-        a = int(255 * prog)
-        rect = self.get_rect()
-        atacando = tempo_ms - self.ultimo_ataque < 250
-        cor = VERMELHO_ALARME if atacando else (200, 120, 255)
-        pulso = 3 + int(1.5 * math.sin(tempo_ms / 120 + self.semente))
+class PuzzleSom:
+    def __init__(self, posicoes, indice_real):
+        self.fontes = [{"pos": p, "real": (i == indice_real)} for i, p in enumerate(posicoes)]
+        self.raio_interacao = 45
+        self.chave_revelada = False
+        self.ultima_mensagem = ""
 
-        brilho = pygame.Surface((70, 30), pygame.SRCALPHA)
-        for ox in (-9, 9):
-            pygame.draw.circle(brilho, (*cor, a // 4), (35 + ox, 15), pulso + 6)
-            pygame.draw.circle(brilho, (*cor, a), (35 + ox, 15), pulso)
-        surf.blit(brilho, (rect.centerx - 35, rect.bottom - 86 + 15))
+    def fonte_proxima(self, jogador):
+        centro = jogador.get_rect().center
+        for f in self.fontes:
+            dist = ((centro[0] - f["pos"][0]) ** 2 + (centro[1] - f["pos"][1]) ** 2) ** 0.5
+            if dist <= self.raio_interacao:
+                return f
+        return None
+
+    def ouvir(self, fonte):
+        if fonte["real"]:
+            self.chave_revelada = True
+            self.ultima_mensagem = "Esse som é real. A chave estava perto dele."
+        else:
+            self.ultima_mensagem = "Só era o gás mexendo com sua cabeça de novo."
+        return self.chave_revelada
 
     def desenhar(self, surf, tempo_ms):
-        self.desenhar_corpo(surf, tempo_ms)
-        self.desenhar_olhos(surf, tempo_ms)
+        for f in self.fontes:
+            sprites.desenhar_fonte_som(surf, f["pos"], f["real"], tempo_ms)
 
-class GuardaPrisao(Personagem):
-    """Guarda da prisão.
 
-    Patrulha uma rota (ou fica parado num posto olhando de um lado para o outro),
-    enxerga dentro de um cone, investiga barulhos e vai enchendo a "suspeita"
-    enquanto vê o jogador. Quando a suspeita chega a 1.0, o jogador foi visto.
+class PuzzleDisjuntores:
+    def __init__(self, posicoes, ordem_correta):
+        self.disjuntores = [{"pos": p, "ligado": False, "id": i} for i, p in enumerate(posicoes)]
+        self.ordem_correta = ordem_correta
+        self.progresso = []
+        self.resolvido = False
+        self.raio_interacao = 40
 
-    - Agachado, o jogador só é visto de perto (metade do alcance).
-    - Agachado dentro de um esconderijo, só é visto se o guarda quase esbarrar nele.
-    - Paredes bloqueiam a visão.
-    """
+    def disjuntor_proximo(self, jogador):
+        centro = jogador.get_rect().center
+        for d in self.disjuntores:
+            if d["ligado"]:
+                continue
+            dist = ((centro[0] - d["pos"][0]) ** 2 + (centro[1] - d["pos"][1]) ** 2) ** 0.5
+            if dist <= self.raio_interacao:
+                return d
+        return None
 
-    TAMANHO = 50
-    DISTANCIA_ESBARRAO = 45
-    _fonte = None
-    _ponto = None
-
-    def __init__(self, x, y, rota=None, angulo=0.0, velocidade=1.3, alcance=330, abertura=56,
-                 pausa_ms=1500, varredura=0.0, tempo_vista_em_pe=650, tempo_vista_agachado=1300):
-        super().__init__(x, y, nome='Guarda', dano=0)
-        self.origem = (x, y)
-        self.angulo_inicial = angulo
-        self.rota = [tuple(p) for p in rota] if rota else []
-        self.velocidade = velocidade
-        self.alcance = alcance
-        self.abertura = abertura
-        self.pausa_ms = pausa_ms
-        self.varredura = varredura
-        self.tempo_vista_em_pe = tempo_vista_em_pe
-        self.tempo_vista_agachado = tempo_vista_agachado
-        self.paredes = []
-        self.reiniciar()
-
-    def reiniciar(self):
-        self.x, self.y = self.origem
-        self.angulo = self.angulo_inicial
-        self.indice_rota = 1 if len(self.rota) > 1 else 0
-        self.estado = 'patrulha' if len(self.rota) > 1 else 'posto'
-        self.espera_ate = 0
-        self.alvo_som = None
-        self.tempo_investigando = 6000
-        self.olhando_ate = 0
-        self.angulo_chegada = self.angulo
-        self.travado_ms = 0.0
-        self.suspeita = 0.0
-        self.viu = False
-        self._t = None
-
-    def definir_mundo(self, paredes):
-        self.paredes = paredes
-
-    def get_rect(self):
-        return pygame.Rect(int(self.x - self.TAMANHO // 2), int(self.y - self.TAMANHO // 2),
-                           self.TAMANHO, self.TAMANHO)
-
-    def mover(self, direcao):
-        pass
-
-    def _angulo_para(self, ponto):
-        return math.degrees(math.atan2(ponto[1] - self.y, ponto[0] - self.x))
-
-    def _virar(self, alvo, taxa):
-        dif = (alvo - self.angulo + 180) % 360 - 180
-        if abs(dif) <= taxa:
-            self.angulo = alvo % 360
-        else:
-            self.angulo = (self.angulo + (taxa if dif > 0 else -taxa)) % 360
-
-    def _bate(self):
-        return self.get_rect().collidelist(self.paredes) != -1
-
-    def _ir_para(self, ponto, velocidade, fator):
-        vx, vy = ponto[0] - self.x, ponto[1] - self.y
-        dist = math.hypot(vx, vy)
-        passo = velocidade * fator
-        if dist <= passo:
-            self.x, self.y = ponto
+    def acionar(self, disjuntor):
+        esperado = self.ordem_correta[len(self.progresso)]
+        if disjuntor["id"] == esperado:
+            disjuntor["ligado"] = True
+            self.progresso.append(disjuntor["id"])
+            if len(self.progresso) == len(self.ordem_correta):
+                self.resolvido = True
             return True
-        self._virar(self._angulo_para(ponto), 7 * fator)
-        antes = (self.x, self.y)
-        dx, dy = vx / dist * passo, vy / dist * passo
-        self.x += dx
-        if self._bate():
-            self.x -= dx
-        self.y += dy
-        if self._bate():
-            self.y -= dy
-        if math.hypot(self.x - antes[0], self.y - antes[1]) < passo * 0.1:
-            self.travado_ms += fator * 16.667
-            if self.travado_ms > 1200:
-                self.travado_ms = 0.0
-                return True
         else:
-            self.travado_ms = 0.0
-        return False
-
-    def ouvir(self, ponto, tempo_ms, raio=950, tempo_investigando=6000):
-        if math.hypot(ponto[0] - self.x, ponto[1] - self.y) > raio:
-            return False
-        self.estado = 'investigando'
-        self.alvo_som = (float(ponto[0]), float(ponto[1]))
-        self.tempo_investigando = tempo_investigando
-        self.travado_ms = 0.0
-        return True
-
-    def _comportamento(self, tempo_ms, fator):
-        if self.estado == 'investigando':
-            if self.alvo_som is not None:
-                if self._ir_para(self.alvo_som, self.velocidade * 1.6, fator):
-                    self.alvo_som = None
-                    self.olhando_ate = tempo_ms + self.tempo_investigando
-                    self.angulo_chegada = self.angulo
-            else:
-                self.angulo = (self.angulo_chegada + 40 * math.sin(tempo_ms / 450)) % 360
-                if tempo_ms >= self.olhando_ate:
-                    self.estado = 'voltando'
-        elif self.estado == 'voltando':
-            destino = self.rota[self.indice_rota] if self.rota else self.origem
-            if self._ir_para(destino, self.velocidade, fator):
-                self.estado = 'patrulha' if len(self.rota) > 1 else 'posto'
-        elif self.estado == 'patrulha':
-            destino = self.rota[self.indice_rota]
-            if tempo_ms < self.espera_ate:
-                self._virar(self._angulo_para(destino), 3 * fator)
-            elif self._ir_para(destino, self.velocidade, fator):
-                self.indice_rota = (self.indice_rota + 1) % len(self.rota)
-                self.espera_ate = tempo_ms + self.pausa_ms
-        else:  # posto
-            self._virar(self.angulo_inicial + self.varredura * math.sin(tempo_ms / 1100), 2 * fator)
-
-    def _em_parede(self, px, py):
-        if GuardaPrisao._ponto is None:
-            GuardaPrisao._ponto = pygame.Rect(0, 0, 1, 1)
-        GuardaPrisao._ponto.x = int(px)
-        GuardaPrisao._ponto.y = int(py)
-        return GuardaPrisao._ponto.collidelist(self.paredes) != -1
-
-    def enxerga(self, jogador, esconderijos=()):
-        rect = jogador.get_rect()
-        cx, cy = rect.center
-        dist = math.hypot(cx - self.x, cy - self.y)
-
-        escondido = jogador.agachado and any(e.collidepoint(cx, cy) for e in esconderijos)
-        if escondido:
-            alcance = self.DISTANCIA_ESBARRAO
-        elif jogador.agachado:
-            alcance = self.alcance * 0.5
-        else:
-            alcance = self.alcance
-        if dist > alcance:
+            for d in self.disjuntores:
+                d["ligado"] = False
+            self.progresso = []
             return False
 
-        if dist > self.DISTANCIA_ESBARRAO:
-            ang = math.degrees(math.atan2(cy - self.y, cx - self.x))
-            if abs((ang - self.angulo + 180) % 360 - 180) > self.abertura / 2:
-                return False
+    def desenhar(self, surf):
+        tempo = pygame.time.get_ticks()
+        for d in self.disjuntores:
+            sprites.desenhar_disjuntor(surf, d["pos"], d["ligado"], tempo)
 
-        passos = int(dist // 12)
-        for i in range(1, passos):
-            t = i / passos
-            if self._em_parede(self.x + (cx - self.x) * t, self.y + (cy - self.y) * t):
-                return False
-        return True
 
-    def atualizar(self, jogador, esconderijos, tempo_ms):
-        dt = 16.667 if self._t is None else max(0.0, min(50.0, tempo_ms - self._t))
-        self._t = tempo_ms
-        fator = dt / 16.667
+class PuzzleFuzil:
+    def __init__(self, pos, golpes_necessarios=3):
+        self.pos = pos
+        self.golpes_necessarios = golpes_necessarios
+        self.golpes = 0
+        self.consertado = False
+        self.raio_interacao = 40
 
-        self.viu = self.enxerga(jogador, esconderijos)
-        if self.viu:
-            self._virar(self._angulo_para(jogador.get_rect().center), 9 * fator)
-            tempo_total = self.tempo_vista_agachado if jogador.agachado else self.tempo_vista_em_pe
-            self.suspeita = min(1.0, self.suspeita + dt / tempo_total)
-            return self.suspeita >= 1.0
+    def perto(self, jogador):
+        centro = jogador.get_rect().center
+        dist = ((centro[0] - self.pos[0]) ** 2 + (centro[1] - self.pos[1]) ** 2) ** 0.5
+        return dist <= self.raio_interacao
 
-        self.suspeita = max(0.0, self.suspeita - dt / 2500)
-        self._comportamento(tempo_ms, fator)
-        return False
+    def golpear(self):
+        if self.consertado:
+            return True
+        self.golpes += 1
+        if self.golpes >= self.golpes_necessarios:
+            self.consertado = True
+        return self.consertado
 
-    def _pontos_do_cone(self):
-        pontos = [(self.x, self.y)]
-        passos = 14
-        a0 = math.radians(self.angulo - self.abertura / 2)
-        a1 = math.radians(self.angulo + self.abertura / 2)
-        for i in range(passos + 1):
-            ang = a0 + (a1 - a0) * i / passos
-            c, s = math.cos(ang), math.sin(ang)
-            d = 0
-            while d < self.alcance:
-                if self._em_parede(self.x + c * (d + 12), self.y + s * (d + 12)):
-                    break
-                d += 12
-            pontos.append((self.x + c * d, self.y + s * d))
-        return pontos
-
-    def desenhar(self, surf_base, cone_surf, jogador):
-        tempo_ms = pygame.time.get_ticks()
-        cx, cy = int(self.x), int(self.y)
-
-        perto = abs(jogador.get_rect().centerx - cx) < 900
-        if perto:
-            alerta = self.viu or self.suspeita >= 0.7
-            if alerta:
-                cor_cone = (255, 50, 50, 80)
-            elif self.suspeita > 0.15 or self.estado == 'investigando':
-                cor_cone = (255, 170, 40, 65)
-            else:
-                cor_cone = (255, 255, 120, 45)
-            pygame.draw.polygon(cone_surf, cor_cone, self._pontos_do_cone())
-
-        rad = math.radians(self.angulo)
-        fx, fy = math.cos(rad), math.sin(rad)
-        pygame.draw.circle(surf_base, (22, 26, 40), (cx, cy), 23)
-        pygame.draw.circle(surf_base, (58, 70, 108), (cx, cy), 20)
-        pygame.draw.line(surf_base, (30, 34, 50), (cx - fy * 20, cy + fx * 20), (cx + fy * 20, cy - fx * 20), 5)
-        pygame.draw.circle(surf_base, (205, 175, 145), (int(cx + fx * 4), int(cy + fy * 4)), 11)
-        pygame.draw.circle(surf_base, (30, 34, 50), (int(cx + fx * 7), int(cy + fy * 7)), 11, width=3)
-        lanterna = (int(cx + fx * 30), int(cy + fy * 30))
-        pygame.draw.line(surf_base, (90, 90, 100), (cx + fx * 18, cy + fy * 18), lanterna, 4)
-        pygame.draw.circle(surf_base, (255, 240, 150), lanterna, 5)
-
-        if self.suspeita > 0.04:
-            if GuardaPrisao._fonte is None:
-                GuardaPrisao._fonte = pygame.font.SysFont(None, 30, bold=True)
-            largura = 44
-            barra = pygame.Rect(cx - largura // 2, cy - 48, largura, 6)
-            pygame.draw.rect(surf_base, (30, 30, 35), barra)
-            cor = (255, 70, 60) if self.suspeita >= 0.7 else (255, 200, 60)
-            pygame.draw.rect(surf_base, cor, (barra.x, barra.y, int(largura * self.suspeita), 6))
-            pygame.draw.rect(surf_base, (210, 210, 210), barra, width=1)
-            marca = GuardaPrisao._fonte.render("!" if self.suspeita >= 0.7 else "?", True, cor)
-            surf_base.blit(marca, marca.get_rect(midbottom=(cx, cy - 50)))
-        elif self.estado == 'investigando':
-            if GuardaPrisao._fonte is None:
-                GuardaPrisao._fonte = pygame.font.SysFont(None, 30, bold=True)
-            marca = GuardaPrisao._fonte.render("?", True, (255, 200, 60))
-            surf_base.blit(marca, marca.get_rect(midbottom=(cx, cy - 30)))
+    def desenhar(self, surf, fonte):
+        sprites.desenhar_reparo(surf, self.pos, self.consertado, pygame.time.get_ticks())
+        if not self.consertado:
+            txt = fonte.render(f"{self.golpes}/{self.golpes_necessarios}", True, (255, 255, 255))
+            surf.blit(txt, txt.get_rect(center=(self.pos[0], self.pos[1] - 22)))
