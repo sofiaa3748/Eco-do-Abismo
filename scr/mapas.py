@@ -701,10 +701,63 @@ TEMAS = {
 }
 
 
+def _acabamento_cinematico(surf, tema, rng):
+    """Camada de arte procedural: desgaste, luz localizada e objetos de cena."""
+    w, h = surf.get_size()
+    cores = {"dormitorio": (130, 178, 166), "deposito": (202, 153, 95),
+             "escritorio": (158, 178, 194), "corredor": (135, 166, 190),
+             "duto": (160, 192, 165), "manutencao": (215, 164, 92),
+             "abandonado": (159, 135, 124), "hospital": (150, 205, 190),
+             "prisao": (140, 164, 191), "geradores": (231, 160, 85),
+             "patio": (155, 177, 198), "seguranca": (199, 93, 89),
+             "biblioteca": (210, 176, 117)}
+    cor = cores.get(tema, (170, 180, 180))
+    # Patina de piso com marcas finas e riscos de arrasto, deterministica.
+    marcas = pygame.Surface((w, h), pygame.SRCALPHA)
+    for i in range(max(25, (w * h) // 12500)):
+        x, y = rng.randrange(30, max(31, w-30)), rng.randrange(40, max(41, h-40))
+        comprimento = rng.randrange(12, 55)
+        pygame.draw.line(marcas, (8, 12, 16, rng.randrange(12, 30)),
+                         (x, y), (min(w-1, x+comprimento), y+rng.randrange(-4, 5)), 1)
+        if i % 5 == 0:
+            pygame.draw.line(marcas, (*cor, 23), (x, y+3), (min(w-1,x+comprimento//2), y+3), 1)
+    # Pequenas luminarias e halos suaves para leitura espacial.
+    for x in range(165, w-80, 390):
+        for y in (90, h-90):
+            halo = pygame.Surface((220, 220), pygame.SRCALPHA)
+            for r in range(105, 10, -10):
+                pygame.draw.circle(halo, (*cor, max(1, int(9*(1-r/115)))), (110,110), r)
+            marcas.blit(halo, (x-110, y-110))
+            pygame.draw.circle(marcas, (16, 20, 24, 210), (x,y), 12)
+            pygame.draw.circle(marcas, (*cor, 185), (x,y), 6)
+            pygame.draw.circle(marcas, (240, 232, 201, 205), (x-2,y-2), 2)
+    # Objetos ambientais: documentos, latas, parafusos, marcas de aviso.
+    for i in range(max(12, (w*h)//52000)):
+        x, y = rng.randrange(65,max(66,w-65)), rng.randrange(65,max(66,h-65))
+        if i % 3 == 0:
+            pygame.draw.polygon(marcas, (186,174,144,135), [(x,y),(x+17,y-3),(x+21,y+9),(x+3,y+13)])
+            pygame.draw.line(marcas, (66,67,67,120), (x+4,y+4), (x+14,y+2), 1)
+        elif i % 3 == 1:
+            pygame.draw.ellipse(marcas, (15,20,23,115), (x-3,y+5,20,8))
+            pygame.draw.rect(marcas, (82,92,96,170), (x,y,13,9), border_radius=2)
+            pygame.draw.line(marcas, (171,174,164,160), (x+2,y+2),(x+10,y+2),1)
+        else:
+            pygame.draw.circle(marcas, (20,24,28,125), (x,y), 5)
+            pygame.draw.circle(marcas, (154,154,142,160), (x,y), 3,1)
+    surf.blit(marcas, (0,0))
+    # Vinheta sutil, pré-calculada apenas na construção do mapa.
+    vinheta = pygame.Surface((w,h),pygame.SRCALPHA)
+    for k in range(9):
+        margem = k*11
+        pygame.draw.rect(vinheta,(3,7,11,4+k), (margem,margem,w-2*margem,h-2*margem), max(1, 12-k))
+    surf.blit(vinheta,(0,0))
+
+
 def fundo_tema(sala, tema):
     surf = pygame.Surface((sala.largura, sala.altura))
     rng = random.Random(sala.largura * 17 + sala.altura * 3 + hash(tema) % 1000)
     TEMAS[tema](surf, sala, rng)
+    _acabamento_cinematico(surf, tema, rng)
     return surf
 
 
