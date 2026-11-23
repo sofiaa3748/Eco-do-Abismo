@@ -36,9 +36,10 @@ class Dica:
         self.coletada = False
 
     def desenhar(self, surf):
-        if self.coletada:
-            return
+        # As pistas permanecem visíveis no mundo até o jogador abrir o puzzle.
         sprites.blit_centro(surf, "dica", self.rect.center)
+        if not self.coletada:
+            pygame.draw.circle(surf, (235, 195, 85), self.rect.center, 15, 1)
 
 
 class Documento:
