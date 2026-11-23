@@ -166,17 +166,21 @@ def _x(surf, f):
 
 
 def arte(nome):
-    """Sprite procedural em cache (itens)."""
+    """Sprite procedural em cache (itens).
+
+    Nesta versão, a arte gerada por código tem prioridade para evitar que PNGs antigos
+    e muito simples deixem os itens visualmente pobres.
+    """
     s = _arte.get(nome)
     if s is None:
-        # se existir assets/sprites/objetos/<nome>.png, ele substitui o desenho por código
-        for base in (_AQUI, os.path.join(_AQUI, "..")):
-            caminho = os.path.normpath(os.path.join(base, "assets", "sprites", "objetos", nome + ".png"))
-            if os.path.exists(caminho):
-                s = pygame.image.load(caminho).convert_alpha()
-                break
-        if s is None:
+        if nome in _CONSTRUTORES:
             s = _CONSTRUTORES[nome]()
+        else:
+            for base in (_AQUI, os.path.join(_AQUI, "..")):
+                caminho = os.path.normpath(os.path.join(base, "assets", "sprites", "objetos", nome + ".png"))
+                if os.path.exists(caminho):
+                    s = pygame.image.load(caminho).convert_alpha()
+                    break
         _arte[nome] = s
     return s
 
@@ -192,103 +196,117 @@ M1, M2, M3 = (170, 176, 188), (126, 132, 146), (84, 90, 106)
 OURO, OURO_B, OURO_L = (222, 168, 36), (150, 100, 10), (248, 214, 100)
 
 
+
+
 def _pilula():
-    s = _px(14, 8)
-    pygame.draw.rect(s, (110, 30, 50), (0, 0, 14, 8), border_radius=4)
-    pygame.draw.rect(s, (226, 56, 66), (1, 1, 6, 6), border_top_left_radius=3, border_bottom_left_radius=3)
-    pygame.draw.rect(s, (70, 116, 236), (7, 1, 6, 6), border_top_right_radius=3, border_bottom_right_radius=3)
-    pygame.draw.line(s, (255, 190, 190), (2, 2), (5, 2))
-    pygame.draw.line(s, (190, 214, 255), (8, 2), (11, 2))
-    return pygame.transform.rotate(_x(s, 2), 35)
+    s = _px(34, 34)
+    for r, a in ((15, 35), (11, 55), (8, 70)):
+        pygame.draw.circle(s, (85, 205, 255, a), (17, 17), r)
+    pygame.draw.rect(s, (52, 70, 88), (10, 5, 14, 24), border_radius=6)
+    pygame.draw.rect(s, (110, 136, 160), (11, 6, 12, 22), border_radius=5)
+    pygame.draw.rect(s, (160, 186, 210), (12, 7, 10, 5), border_radius=3)
+    pygame.draw.rect(s, (228, 198, 94), (13, 14, 8, 9), border_radius=4)
+    pygame.draw.rect(s, (201, 151, 46), (13, 18, 8, 5), border_radius=3)
+    pygame.draw.rect(s, (235, 232, 240, 120), (14, 8, 2, 13), border_radius=1)
+    return s
 
 
 def _chave():
-    s = _px(14, 7)
-    pygame.draw.circle(s, OURO_B, (3, 3), 3)
-    pygame.draw.circle(s, OURO, (3, 3), 2)
-    pygame.draw.circle(s, (0, 0, 0, 0), (3, 3), 1)
-    pygame.draw.rect(s, OURO, (5, 2, 8, 2))
-    pygame.draw.rect(s, OURO_B, (5, 4, 8, 1))
-    pygame.draw.rect(s, OURO, (10, 4, 2, 3))
-    pygame.draw.rect(s, OURO, (12, 4, 2, 2))
-    s.set_at((2, 1), OURO_L)
-    return _x(s, 2)
+    s = _px(34, 18)
+    pygame.draw.circle(s, (110, 72, 12), (8, 9), 7)
+    pygame.draw.circle(s, (222, 177, 58), (8, 9), 6)
+    pygame.draw.circle(s, (82, 53, 8), (8, 9), 3)
+    pygame.draw.rect(s, (222, 177, 58), (13, 7, 15, 4), border_radius=2)
+    pygame.draw.rect(s, (184, 136, 34), (13, 11, 15, 2))
+    pygame.draw.rect(s, (222, 177, 58), (24, 10, 4, 5))
+    pygame.draw.rect(s, (222, 177, 58), (28, 9, 3, 4))
+    pygame.draw.line(s, (245, 220, 128), (15, 8), (27, 8))
+    return s
 
 
 def _documento():
-    s = _px(11, 8)
-    pygame.draw.rect(s, (150, 120, 84), (0, 0, 11, 8))
-    pygame.draw.rect(s, (226, 212, 180), (1, 1, 9, 6))
-    for y in (2, 4):
-        pygame.draw.line(s, (170, 140, 100), (2, y), (8, y))
-    pygame.draw.line(s, (150, 120, 84), (2, 6), (5, 6))
-    return _x(s, 2)
+    s = _px(24, 30)
+    pygame.draw.rect(s, (130, 96, 60), (1, 1, 22, 28), border_radius=2)
+    pygame.draw.rect(s, (232, 223, 196), (3, 3, 18, 24), border_radius=2)
+    pygame.draw.polygon(s, (210, 200, 174), [(17, 3), (21, 7), (21, 3)])
+    for y in range(8, 22, 4):
+        pygame.draw.line(s, (150, 132, 105), (6, y), (17, y), 1)
+    pygame.draw.line(s, (170, 70, 55), (6, 23), (13, 23), 2)
+    return s
 
 
 def _documento_especial():
-    s = _px(11, 8)
-    pygame.draw.rect(s, P_C, (0, 0, 11, 8))
-    pygame.draw.rect(s, (232, 186, 96), (1, 1, 9, 6))
-    pygame.draw.line(s, (190, 140, 60), (4, 1), (4, 6))
-    pygame.draw.line(s, (190, 140, 60), (7, 1), (7, 6))
-    for p in ((8, 2), (9, 3), (9, 2), (8, 3)):
-        s.set_at(p, (200, 50, 50))
-    return _x(s, 2)
+    s = _px(26, 32)
+    pygame.draw.rect(s, (116, 82, 34), (0, 0, 26, 32), border_radius=3)
+    pygame.draw.rect(s, (236, 212, 142), (3, 3, 20, 26), border_radius=2)
+    pygame.draw.rect(s, (170, 36, 36), (15, 6, 5, 5), border_radius=1)
+    pygame.draw.line(s, (154, 112, 48), (7, 8), (18, 8), 1)
+    pygame.draw.line(s, (154, 112, 48), (7, 12), (18, 12), 1)
+    pygame.draw.line(s, (154, 112, 48), (7, 16), (18, 16), 1)
+    pygame.draw.line(s, (154, 112, 48), (7, 20), (15, 20), 1)
+    pygame.draw.rect(s, (188, 140, 62), (4, 3, 3, 26))
+    return s
 
 
 def _dica():
-    s = _px(10, 10)
-    pygame.draw.rect(s, OURO_B, (0, 0, 10, 10))
-    pygame.draw.rect(s, (240, 206, 84), (1, 1, 8, 8))
-    pygame.draw.polygon(s, (206, 164, 50), [(6, 9), (9, 6), (9, 9)])
-    for y in (3, 5):
-        pygame.draw.line(s, OURO_B, (2, y), (6, y))
-    return _x(s, 2)
+    s = _px(24, 24)
+    pygame.draw.rect(s, (174, 136, 44), (1, 1, 22, 22), border_radius=3)
+    pygame.draw.rect(s, (242, 210, 96), (3, 3, 18, 18), border_radius=3)
+    pygame.draw.polygon(s, (213, 182, 74), [(16, 21), (21, 16), (21, 21)])
+    pygame.draw.circle(s, (154, 113, 26), (12, 9), 4)
+    pygame.draw.rect(s, (154, 113, 26), (11, 12, 2, 5), border_radius=1)
+    pygame.draw.circle(s, (154, 113, 26), (12, 18), 1)
+    return s
 
 
 def _mascara():
-    s = _px(13, 11)
-    pygame.draw.rect(s, (52, 68, 56), (1, 0, 11, 10), border_radius=4)
-    pygame.draw.rect(s, (112, 138, 116), (2, 1, 9, 8), border_radius=3)
-    for cx in (4, 9):
-        pygame.draw.circle(s, (52, 68, 56), (cx, 4), 2)
-        pygame.draw.circle(s, (130, 224, 196), (cx, 4), 1)
-    pygame.draw.rect(s, M3, (5, 7, 3, 4))
-    pygame.draw.line(s, M1, (5, 8), (7, 8))
-    return _x(s, 2)
+    s = _px(34, 28)
+    pygame.draw.ellipse(s, (45, 62, 57), (4, 3, 26, 20))
+    pygame.draw.ellipse(s, (104, 138, 122), (6, 5, 22, 16))
+    for cx in (12, 22):
+        pygame.draw.circle(s, (42, 56, 52), (cx, 12), 5)
+        pygame.draw.circle(s, (130, 220, 196), (cx, 12), 3)
+        pygame.draw.circle(s, (180, 255, 235), (cx-1, 11), 1)
+    pygame.draw.rect(s, (76, 82, 94), (14, 17, 6, 8), border_radius=2)
+    pygame.draw.line(s, (164, 170, 176), (14, 19), (20, 19))
+    pygame.draw.arc(s, (36, 48, 46), (0, 8, 13, 14), 1.1, 2.4, 2)
+    pygame.draw.arc(s, (36, 48, 46), (21, 8, 13, 14), 0.7, 2.0, 2)
+    return s
 
 
 def _lanterna():
-    s = _px(10, 7)
-    pygame.draw.rect(s, P_C, (0, 1, 7, 5))
-    pygame.draw.rect(s, OURO, (1, 2, 5, 3))
-    pygame.draw.rect(s, P_C, (7, 0, 3, 7))
-    pygame.draw.rect(s, (255, 244, 190), (8, 1, 2, 5))
-    return _x(s, 2)
+    s = _px(34, 18)
+    pygame.draw.rect(s, (48, 40, 30), (3, 5, 18, 8), border_radius=4)
+    pygame.draw.rect(s, (132, 102, 58), (5, 6, 14, 6), border_radius=3)
+    pygame.draw.rect(s, (66, 72, 80), (18, 4, 9, 10), border_radius=2)
+    pygame.draw.rect(s, (206, 220, 234), (24, 5, 6, 8), border_radius=2)
+    pygame.draw.polygon(s, (255, 240, 176, 120), [(30, 6), (34, 3), (34, 15), (30, 12)])
+    pygame.draw.line(s, (220, 190, 96), (10, 5), (10, 12), 1)
+    return s
 
 
 def _pe_de_cabra():
-    s = _px(18, 8)
-    pygame.draw.line(s, M3, (2, 6), (15, 2), 3)
-    pygame.draw.line(s, M1, (2, 5), (15, 1), 1)
-    pygame.draw.line(s, M3, (15, 2), (17, 5), 3)
-    pygame.draw.line(s, M3, (0, 6), (2, 7), 2)
-    return _x(s, 2)
+    s = _px(42, 18)
+    pygame.draw.line(s, (84, 92, 104), (5, 14), (31, 5), 8)
+    pygame.draw.line(s, (152, 160, 174), (6, 12), (30, 4), 3)
+    pygame.draw.line(s, (84, 92, 104), (30, 5), (38, 10), 6)
+    pygame.draw.line(s, (84, 92, 104), (4, 13), (1, 16), 4)
+    pygame.draw.arc(s, (180, 188, 202), (30, 1, 12, 12), 4.0, 6.1, 2)
+    return s
 
 
 def _caixa_base():
-    s = _px(24, 24)
-    pygame.draw.rect(s, P_A, (0, 0, 24, 24))
-    for y in range(5, 24, 6):
-        pygame.draw.line(s, P_B, (0, y), (23, y))
-        pygame.draw.line(s, P_C, (0, y + 1), (23, y + 1))
-    for (a, b) in (((1, 1), (22, 22)), ((22, 1), (1, 22))):
-        pygame.draw.line(s, P_C, a, b, 2)
-    pygame.draw.rect(s, P_C, (0, 0, 24, 24), 2)
-    pygame.draw.line(s, P_B, (2, 2), (21, 2))
-    for c in ((3, 3), (20, 3), (3, 20), (20, 20)):
-        pygame.draw.rect(s, M2, (c[0] - 1, c[1] - 1, 3, 3))
-        s.set_at((c[0] - 1, c[1] - 1), M1)
+    s = _px(34, 34)
+    pygame.draw.rect(s, (96, 58, 34), (1, 1, 32, 32), border_radius=3)
+    for y in (5, 13, 21, 29):
+        pygame.draw.line(s, (132, 82, 51), (3, y), (30, y), 2)
+        pygame.draw.line(s, (74, 43, 24), (3, y + 1), (30, y + 1), 1)
+    pygame.draw.line(s, (68, 38, 22), (5, 5), (29, 29), 3)
+    pygame.draw.line(s, (68, 38, 22), (29, 5), (5, 29), 3)
+    for p in ((4, 4), (29, 4), (4, 29), (29, 29)):
+        pygame.draw.rect(s, (102, 108, 117), (p[0], p[1], 3, 3))
+        pygame.draw.rect(s, (160, 170, 182), (p[0]+1, p[1]+1, 1, 1))
+    pygame.draw.rect(s, (58, 34, 18), (1, 1, 32, 32), 2, border_radius=3)
     return s
 
 
@@ -506,27 +524,32 @@ def desenhar_porta(surf, rect, aberta, tempo_ms=0):
 _ROXO, _ROXO_CLARO = (22, 12, 34), (95, 48, 140)
 
 
+
 def _vulto_img(quadro):
     chave = ("vulto", quadro)
     img = _arte.get(chave)
     if img is not None:
         return img
-    s = _px(35, 48)
-    pts = [(17, 2), (24, 9), (28, 24), (31, 44)]
-    for i in range(8):
-        x = 31 - i * 4
-        y = 44 + (2 if (i + quadro) % 2 else -1)
-        pts.append((x, y))
-    pts += [(3, 30), (6, 9)]
-    pygame.draw.polygon(s, _ROXO, pts)
-    pygame.draw.polygon(s, _ROXO_CLARO, pts, 1)
-    pygame.draw.ellipse(s, (4, 2, 8), (11, 7, 13, 14))
+    s = _px(46, 58)
+    corpo = [(23, 2), (31, 8), (36, 18), (39, 31), (42, 48), (37, 56), (9, 56), (4, 48), (7, 31), (10, 19), (15, 8)]
+    pygame.draw.polygon(s, (18, 8, 28), corpo)
+    pygame.draw.polygon(s, (108, 62, 156), corpo, 2)
+    pygame.draw.ellipse(s, (5, 4, 12), (14, 10, 18, 20))
+    pygame.draw.arc(s, (135, 84, 186), (10, 7, 26, 25), 3.5, 5.9, 2)
+    recorte = 1 if quadro % 2 == 0 else -1
     for lado in (-1, 1):
-        base = (17 + lado * 9, 24)
-        ponta = (17 + lado * 15, 34 + (quadro % 2) * 2)
-        pygame.draw.line(s, _ROXO_CLARO, base, ponta, 2)
+        ombro = (23 + lado * 10, 26)
+        cotovelo = (23 + lado * 15, 35 + recorte)
+        mao = (23 + lado * 19, 44 + recorte)
+        pygame.draw.line(s, (88, 58, 132), ombro, cotovelo, 3)
+        pygame.draw.line(s, (128, 92, 180), cotovelo, mao, 3)
         for d in (-2, 0, 2):
-            pygame.draw.line(s, _ROXO_CLARO, ponta, (ponta[0] + lado * 2 + d, ponta[1] + 4))
+            pygame.draw.line(s, (160, 120, 210), mao, (mao[0] + lado * (3 + abs(d)//2), mao[1] + 5 + d // 2), 1)
+    for px in (18, 28):
+        pygame.draw.circle(s, (210, 130, 255), (px, 22), 2)
+        pygame.draw.circle(s, (255, 180, 255), (px, 22), 1)
+    for y in range(38, 55, 4):
+        pygame.draw.line(s, (88, 46, 124), (12, y + (quadro % 2)), (34, y), 1)
     img = _x(s, 2)
     _arte[chave] = img
     return img
@@ -606,56 +629,64 @@ def _guarda_img(direcao, passo, uniforme=(58, 70, 108), atacando=False):
     return img
 
 
+
 def _guarda_img_codigo(direcao, passo, uniforme=(58, 70, 108), atacando=False):
-    """Guarda em pixel art (24x28 nativo, ampliado 2x). direcao: frente/costas/direita/esquerda."""
+    """Guarda em pixel art mais detalhado (28x34 nativo, ampliado 2x)."""
     chave = ("guarda_codigo", direcao, passo, uniforme, atacando)
     img = _arte.get(chave)
     if img is not None:
         return img
     lado = "direita" if direcao == "esquerda" else direcao
-    s = _px(24, 28)
-    esc = tuple(max(0, c - 28) for c in uniforme)
-    pele, bota, cinto = (205, 175, 145), (28, 28, 34), (30, 34, 50)
-    cap, visor = (30, 36, 60), (18, 22, 38)
+    s = _px(28, 34)
+    esc = tuple(max(0, c - 26) for c in uniforme)
+    claro = tuple(min(255, c + 28) for c in uniforme)
+    pele, bota, cinto = (205, 175, 145), (28, 28, 34), (34, 36, 48)
+    colete = (56, 60, 74)
+    cap, visor = (26, 30, 54), (12, 16, 28)
+    led = (255, 86, 72) if atacando else (235, 210, 82)
     b = 1 if passo else 0
 
     if lado in ("frente", "costas"):
-        pygame.draw.rect(s, bota, (7, 24 + b, 4, 3))
-        pygame.draw.rect(s, bota, (13, 25 - b, 4, 3))
-        pygame.draw.rect(s, esc, (7, 20, 4, 5 + b))
-        pygame.draw.rect(s, esc, (13, 20, 4, 5 - b))
-        pygame.draw.rect(s, uniforme, (6, 13, 12, 8))
-        pygame.draw.rect(s, cinto, (6, 19, 12, 2))
-        pygame.draw.rect(s, uniforme, (3, 14, 3, 7))
-        pygame.draw.rect(s, uniforme, (18, 14, 3, 7))
-        pygame.draw.rect(s, pele, (3, 20, 3, 2))
-        pygame.draw.rect(s, pele, (18, 20, 3, 2))
-        pygame.draw.rect(s, (255, 235, 140), (21, 19, 2, 3))
-        pygame.draw.rect(s, pele, (8, 5, 8, 8))
-        pygame.draw.rect(s, cap, (7, 3, 10, 4))
+        pygame.draw.rect(s, bota, (8, 30 + b, 5, 3))
+        pygame.draw.rect(s, bota, (15, 31 - b, 5, 3))
+        pygame.draw.rect(s, esc, (9, 24, 4, 7 + b))
+        pygame.draw.rect(s, esc, (15, 24, 4, 7 - b))
+        pygame.draw.rect(s, uniforme, (8, 16, 12, 9))
+        pygame.draw.rect(s, claro, (8, 16, 12, 2))
+        pygame.draw.rect(s, colete, (10, 17, 8, 8))
+        pygame.draw.rect(s, cinto, (8, 23, 12, 2))
+        pygame.draw.rect(s, uniforme, (5, 17, 3, 8))
+        pygame.draw.rect(s, uniforme, (20, 17, 3, 8))
+        pygame.draw.rect(s, pele, (5, 24, 3, 2))
+        pygame.draw.rect(s, pele, (20, 24, 3, 2))
+        pygame.draw.rect(s, pele, (10, 7, 8, 8))
+        pygame.draw.rect(s, cap, (9, 4, 10, 4))
+        pygame.draw.rect(s, cap, (8, 8, 12, 2))
         if lado == "frente":
-            pygame.draw.rect(s, visor, (8, 6, 8, 1))
-            ol = (255, 80, 70) if atacando else (30, 30, 40)
-            pygame.draw.rect(s, ol, (9, 9, 2, 2))
-            pygame.draw.rect(s, ol, (13, 9, 2, 2))
-            pygame.draw.rect(s, (255, 210, 80), (14, 15, 2, 2))
+            pygame.draw.rect(s, visor, (10, 9, 8, 2))
+            pygame.draw.rect(s, (32, 32, 38), (11, 12, 2, 1))
+            pygame.draw.rect(s, (32, 32, 38), (15, 12, 2, 1))
+            pygame.draw.rect(s, led, (21, 19, 2, 3))
         else:
-            pygame.draw.rect(s, cap, (8, 5, 8, 7))
+            pygame.draw.rect(s, cap, (10, 8, 8, 6))
+            pygame.draw.rect(s, led, (21, 19, 2, 3))
     else:
-        pygame.draw.rect(s, bota, (9 + b, 24, 5, 3))
-        pygame.draw.rect(s, bota, (10 - b, 25, 5, 3))
-        pygame.draw.rect(s, esc, (10 + b, 20, 4, 5))
-        pygame.draw.rect(s, esc, (10 - b, 20, 4, 5))
-        pygame.draw.rect(s, uniforme, (8, 13, 8, 8))
-        pygame.draw.rect(s, cinto, (8, 19, 8, 2))
-        pygame.draw.rect(s, esc, (6, 14, 3, 6))
-        pygame.draw.rect(s, uniforme, (13, 15, 7, 3))
-        pygame.draw.rect(s, pele, (19, 15, 2, 3))
-        pygame.draw.rect(s, (255, 235, 140), (21, 14, 2, 4))
-        pygame.draw.rect(s, pele, (9, 5, 8, 8))
-        pygame.draw.rect(s, cap, (8, 3, 9, 4))
-        pygame.draw.rect(s, visor, (14, 6, 5, 1))
-        pygame.draw.rect(s, (255, 80, 70) if atacando else (30, 30, 40), (14, 9, 2, 2))
+        pygame.draw.rect(s, bota, (10 + b, 30, 5, 3))
+        pygame.draw.rect(s, bota, (11 - b, 31, 5, 3))
+        pygame.draw.rect(s, esc, (11 + b, 24, 4, 7))
+        pygame.draw.rect(s, esc, (11 - b, 24, 4, 7))
+        pygame.draw.rect(s, uniforme, (9, 16, 9, 9))
+        pygame.draw.rect(s, claro, (9, 16, 9, 2))
+        pygame.draw.rect(s, colete, (10, 17, 7, 8))
+        pygame.draw.rect(s, cinto, (9, 23, 9, 2))
+        pygame.draw.rect(s, esc, (7, 17, 3, 7))
+        pygame.draw.rect(s, uniforme, (15, 18, 8, 3))
+        pygame.draw.rect(s, pele, (22, 18, 2, 3))
+        pygame.draw.rect(s, led, (24, 17, 2, 4))
+        pygame.draw.rect(s, pele, (10, 7, 8, 8))
+        pygame.draw.rect(s, cap, (9, 4, 9, 4))
+        pygame.draw.rect(s, visor, (15, 9, 5, 2))
+        pygame.draw.rect(s, (32, 32, 38), (15, 12, 2, 1))
     img = _x(s, 2)
     if direcao == "esquerda":
         img = pygame.transform.flip(img, True, False)
@@ -740,3 +771,4 @@ class GuardaPrisaoSprite(GuardaPrisao):
                 GuardaPrisao._fonte = pygame.font.SysFont(None, 30, bold=True)
             marca = GuardaPrisao._fonte.render("?", True, (255, 200, 60))
             surf_base.blit(marca, marca.get_rect(midbottom=(cx, cy - 34)))
+
